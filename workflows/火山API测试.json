@@ -1,664 +1,22 @@
 {
   "id": "747af6ac-6c5a-4335-9cc0-895b1b2a91a0",
-  "revision": 0,
+  "revision": 1,
   "last_node_id": 28,
   "last_link_id": 32,
   "nodes": [
     {
-      "id": 18,
-      "type": "LoadImage",
-      "pos": [
-        -538.744477336676,
-        258.46277004441265
-      ],
-      "size": [
-        282.798828125,
-        314
-      ],
-      "flags": {},
-      "order": 0,
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "image",
-          "name": "image",
-          "type": "COMBO",
-          "widget": {
-            "name": "image"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "choose file to upload",
-          "name": "upload",
-          "type": "IMAGEUPLOAD",
-          "widget": {
-            "name": "upload"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "IMAGE",
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            29
-          ]
-        },
-        {
-          "localized_name": "MASK",
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.19.0",
-        "Node name for S&R": "LoadImage",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": [
-        "S08-063-首帧-Klein.png",
-        "image"
-      ]
-    },
-    {
-      "id": 20,
-      "type": "LoadImage",
-      "pos": [
-        -533.744477336676,
-        618.4627700444127
-      ],
-      "size": [
-        282.798828125,
-        314
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "image",
-          "name": "image",
-          "type": "COMBO",
-          "widget": {
-            "name": "image"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "choose file to upload",
-          "name": "upload",
-          "type": "IMAGEUPLOAD",
-          "widget": {
-            "name": "upload"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "IMAGE",
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            21,
-            30
-          ]
-        },
-        {
-          "localized_name": "MASK",
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.19.0",
-        "Node name for S&R": "LoadImage",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": [
-        "S08-063-尾帧-原始.png",
-        "image"
-      ]
-    },
-    {
-      "id": 25,
-      "type": "火山引擎图生视频",
-      "pos": [
-        228.68900058085012,
-        355.51703078505284
-      ],
-      "size": [
-        400,
-        296
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "图片",
-          "name": "图片",
-          "type": "IMAGE",
-          "link": 31
-        },
-        {
-          "localized_name": "参考音频",
-          "name": "参考音频",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 32
-        },
-        {
-          "localized_name": "api_key",
-          "name": "api_key",
-          "type": "STRING",
-          "widget": {
-            "name": "api_key"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "模型",
-          "name": "模型",
-          "type": "COMBO",
-          "widget": {
-            "name": "模型"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "提示词",
-          "name": "提示词",
-          "type": "STRING",
-          "widget": {
-            "name": "提示词"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "视频时长",
-          "name": "视频时长",
-          "type": "INT",
-          "widget": {
-            "name": "视频时长"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "水印",
-          "name": "水印",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "水印"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "随机种子",
-          "name": "随机种子",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "随机种子"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "轮询间隔",
-          "name": "轮询间隔",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "轮询间隔"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "最大等待",
-          "name": "最大等待",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "最大等待"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "视频帧",
-          "name": "视频帧",
-          "type": "IMAGE",
-          "links": [
-            27
-          ]
-        },
-        {
-          "localized_name": "音频",
-          "name": "音频",
-          "type": "AUDIO",
-          "links": [
-            28
-          ]
-        },
-        {
-          "localized_name": "视频信息",
-          "name": "视频信息",
-          "type": "STRING",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "火山引擎图生视频",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": [
-        "",
-        "doubao-seedance-2-0-260128",
-        "蒙面女侠挥剑斩断火折子",
-        5,
-        false,
-        666,
-        10,
-        600
-      ]
-    },
-    {
-      "id": 22,
-      "type": "VHS_VideoCombine",
-      "pos": [
-        212.1103151656723,
-        -426.1043591642152
-      ],
-      "size": [
-        375.28858059219067,
-        334
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 2,
-      "inputs": [
-        {
-          "localized_name": "images",
-          "name": "images",
-          "type": "IMAGE",
-          "link": 17
-        },
-        {
-          "localized_name": "audio",
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 18
-        },
-        {
-          "localized_name": "meta_batch",
-          "name": "meta_batch",
-          "shape": 7,
-          "type": "VHS_BatchManager",
-          "link": null
-        },
-        {
-          "localized_name": "vae",
-          "name": "vae",
-          "shape": 7,
-          "type": "VAE",
-          "link": null
-        },
-        {
-          "localized_name": "frame_rate",
-          "name": "frame_rate",
-          "type": "FLOAT",
-          "widget": {
-            "name": "frame_rate"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "loop_count",
-          "name": "loop_count",
-          "type": "INT",
-          "widget": {
-            "name": "loop_count"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "filename_prefix",
-          "name": "filename_prefix",
-          "type": "STRING",
-          "widget": {
-            "name": "filename_prefix"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "format",
-          "name": "format",
-          "type": "COMBO",
-          "widget": {
-            "name": "format"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "pingpong",
-          "name": "pingpong",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "pingpong"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "save_output",
-          "name": "save_output",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "save_output"
-          },
-          "link": null
-        },
-        {
-          "name": "pix_fmt",
-          "type": [
-            "yuv420p",
-            "p010le"
-          ],
-          "widget": {
-            "name": "pix_fmt"
-          },
-          "link": null
-        },
-        {
-          "name": "bitrate",
-          "type": "INT",
-          "widget": {
-            "name": "bitrate"
-          },
-          "link": null
-        },
-        {
-          "name": "megabit",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "megabit"
-          },
-          "link": null
-        },
-        {
-          "name": "save_metadata",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "save_metadata"
-          },
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "Filenames",
-          "name": "Filenames",
-          "type": "VHS_FILENAMES",
-          "links": null
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-videohelpersuite",
-        "ver": "1.7.9",
-        "Node name for S&R": "VHS_VideoCombine",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": {
-        "frame_rate": 24,
-        "loop_count": 0,
-        "filename_prefix": "AnimateDiff",
-        "format": "video/nvenc_hevc-mp4",
-        "pix_fmt": "yuv420p",
-        "bitrate": 10,
-        "megabit": true,
-        "save_metadata": true,
-        "pingpong": false,
-        "save_output": false,
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "filename": "AnimateDiff_00001-audio.mp4",
-            "subfolder": "",
-            "type": "temp",
-            "format": "video/nvenc_hevc-mp4",
-            "frame_rate": 24,
-            "workflow": "AnimateDiff_00001.png",
-            "fullpath": "D:\\ComfyUI\\temp\\AnimateDiff_00001-audio.mp4"
-          }
-        }
-      }
-    },
-    {
-      "id": 26,
-      "type": "ImageBatchMulti",
-      "pos": [
-        -136.24815911222538,
-        370.2327293849093
-      ],
-      "size": [
-        275,
-        162
-      ],
-      "flags": {},
-      "order": 4,
-      "mode": 0,
-      "inputs": [
-        {
-          "localized_name": "image_1",
-          "name": "image_1",
-          "type": "IMAGE",
-          "link": 29
-        },
-        {
-          "localized_name": "image_2",
-          "name": "image_2",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": 30
-        },
-        {
-          "localized_name": "inputcount",
-          "name": "inputcount",
-          "type": "INT",
-          "widget": {
-            "name": "inputcount"
-          },
-          "link": null
-        },
-        {
-          "name": "image_3",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image_4",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        },
-        {
-          "name": "image_5",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "localized_name": "images",
-          "name": "images",
-          "type": "IMAGE",
-          "links": [
-            31
-          ]
-        }
-      ],
-      "properties": {
-        "cnr_id": "comfyui-kjnodes",
-        "ver": "1.3.7",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": [
-        5,
-        null
-      ]
-    },
-    {
       "id": 12,
       "type": "火山引擎文生视频",
-      "pos": [
-        -213.962846689918,
-        -438.39847104351907
-      ],
-      "size": [
-        397.6163646924547,
-        388.9617769942695
-      ],
+      "pos": [228.68900058085012, -284.4829692149472],
+      "size": [400, 440],
       "flags": {},
-      "order": 3,
-      "mode": 2,
-      "inputs": [
-        {
-          "localized_name": "参考音频",
-          "name": "参考音频",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": null
-        },
-        {
-          "localized_name": "api_key",
-          "name": "api_key",
-          "type": "STRING",
-          "widget": {
-            "name": "api_key"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "模型",
-          "name": "模型",
-          "type": "COMBO",
-          "widget": {
-            "name": "模型"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "提示词",
-          "name": "提示词",
-          "type": "STRING",
-          "widget": {
-            "name": "提示词"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "视频时长",
-          "name": "视频时长",
-          "type": "INT",
-          "widget": {
-            "name": "视频时长"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "水印",
-          "name": "水印",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "水印"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "随机种子",
-          "name": "随机种子",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "随机种子"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "轮询间隔",
-          "name": "轮询间隔",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "轮询间隔"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "最大等待",
-          "name": "最大等待",
-          "shape": 7,
-          "type": "INT",
-          "widget": {
-            "name": "最大等待"
-          },
-          "link": null
-        }
-      ],
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
       "outputs": [
-        {
-          "localized_name": "视频帧",
-          "name": "视频帧",
-          "type": "IMAGE",
-          "links": [
-            17
-          ]
-        },
-        {
-          "localized_name": "音频",
-          "name": "音频",
-          "type": "AUDIO",
-          "links": [
-            18
-          ]
-        },
-        {
-          "localized_name": "视频信息",
-          "name": "视频信息",
-          "type": "STRING",
-          "links": []
-        }
+        {"localized_name": "视频帧", "name": "视频帧", "type": "IMAGE", "links": [17]},
+        {"localized_name": "音频", "name": "音频", "type": "AUDIO", "links": [18]},
+        {"localized_name": "视频信息", "name": "视频信息", "type": "STRING", "links": null}
       ],
       "properties": {
         "Node name for S&R": "火山引擎文生视频",
@@ -673,70 +31,73 @@
         "doubao-seedance-2-0-260128",
         "中国古代市井街道，被血月照亮的场景，满天花瓣飘落，史诗唯美，写实",
         5,
+        "720p",
+        "16:9",
+        true,
         false,
-        666,
+        false,
+        "default",
+        true,
+        -1,
         10,
         600
       ]
     },
     {
-      "id": 28,
-      "type": "LoadAudio",
-      "pos": [
-        -142.7381613665093,
-        589.3607255709493
-      ],
-      "size": [
-        282.798828125,
-        136
-      ],
+      "id": 18,
+      "type": "LoadImage",
+      "pos": [-538.744477336676, 258.46277004441265],
+      "size": [282.798828125, 314],
       "flags": {},
-      "order": 2,
-      "mode": 4,
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"localized_name": "IMAGE", "name": "IMAGE", "type": "IMAGE", "links": [29]},
+        {"localized_name": "MASK", "name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": ["S08-063-首帧-Klein.png", "image"]
+    },
+    {
+      "id": 20,
+      "type": "LoadImage",
+      "pos": [-533.744477336676, 618.4627700444127],
+      "size": [282.798828125, 314],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {"localized_name": "IMAGE", "name": "IMAGE", "type": "IMAGE", "links": [21, 30]},
+        {"localized_name": "MASK", "name": "MASK", "type": "MASK", "links": null}
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": ["S08-063-尾帧-原始.png", "image"]
+    },
+    {
+      "id": 25,
+      "type": "火山引擎图生视频",
+      "pos": [228.68900058085012, 355.51703078505284],
+      "size": [400, 440],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
       "inputs": [
-        {
-          "localized_name": "audio",
-          "name": "audio",
-          "type": "COMBO",
-          "widget": {
-            "name": "audio"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "audioUI",
-          "name": "audioUI",
-          "type": "AUDIO_UI",
-          "widget": {
-            "name": "audioUI"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "choose file to upload",
-          "name": "upload",
-          "type": "AUDIOUPLOAD",
-          "widget": {
-            "name": "upload"
-          },
-          "link": null
-        }
+        {"localized_name": "图片", "name": "图片", "type": "IMAGE", "link": 31},
+        {"localized_name": "参考音频", "name": "参考音频", "shape": 7, "type": "AUDIO", "link": null}
       ],
       "outputs": [
-        {
-          "localized_name": "AUDIO",
-          "name": "AUDIO",
-          "type": "AUDIO",
-          "links": [
-            32
-          ]
-        }
+        {"localized_name": "视频帧", "name": "视频帧", "type": "IMAGE", "links": [27]},
+        {"localized_name": "音频", "name": "音频", "type": "AUDIO", "links": [28]},
+        {"localized_name": "视频信息", "name": "视频信息", "type": "STRING", "links": null}
       ],
-      "title": "参考音频",
       "properties": {
-        "cnr_id": "comfy-core",
-        "ver": "0.19.0",
-        "Node name for S&R": "LoadAudio",
+        "Node name for S&R": "火山引擎图生视频",
         "ue_properties": {
           "widget_ue_connectable": {},
           "input_ue_unconnectable": {},
@@ -744,273 +105,94 @@
         }
       },
       "widgets_values": [
-        "A010C007_2001079M_V1-0045.mp4",
-        null,
-        null
+        "",
+        "doubao-seedance-2-0-260128",
+        "蒙面女侠挥剑斩断火折子",
+        5,
+        "720p",
+        "adaptive",
+        true,
+        false,
+        false,
+        "default",
+        true,
+        -1,
+        10,
+        600
       ]
+    },
+    {
+      "id": 22,
+      "type": "VHS_VideoCombine",
+      "pos": [212.1103151656723, -426.1043591642152],
+      "size": [375.28858059219067, 334],
+      "flags": {},
+      "order": 5,
+      "mode": 2,
+      "inputs": [
+        {"localized_name": "images", "name": "images", "type": "IMAGE", "link": 17},
+        {"localized_name": "audio", "name": "audio", "shape": 7, "type": "AUDIO", "link": 18}
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": [24, 0, "AnimateDiff", "video/h264-mp4", false, true]
     },
     {
       "id": 23,
       "type": "VHS_VideoCombine",
-      "pos": [
-        665.7953752695306,
-        318.45746084099125
-      ],
-      "size": [
-        374.7005515514445,
-        334
-      ],
+      "pos": [668, 355.51703078505284],
+      "size": [375.28858059219067, 334],
       "flags": {},
       "order": 7,
       "mode": 0,
       "inputs": [
-        {
-          "localized_name": "images",
-          "name": "images",
-          "type": "IMAGE",
-          "link": 27
-        },
-        {
-          "localized_name": "audio",
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": 28
-        },
-        {
-          "localized_name": "meta_batch",
-          "name": "meta_batch",
-          "shape": 7,
-          "type": "VHS_BatchManager",
-          "link": null
-        },
-        {
-          "localized_name": "vae",
-          "name": "vae",
-          "shape": 7,
-          "type": "VAE",
-          "link": null
-        },
-        {
-          "localized_name": "frame_rate",
-          "name": "frame_rate",
-          "type": "FLOAT",
-          "widget": {
-            "name": "frame_rate"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "loop_count",
-          "name": "loop_count",
-          "type": "INT",
-          "widget": {
-            "name": "loop_count"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "filename_prefix",
-          "name": "filename_prefix",
-          "type": "STRING",
-          "widget": {
-            "name": "filename_prefix"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "format",
-          "name": "format",
-          "type": "COMBO",
-          "widget": {
-            "name": "format"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "pingpong",
-          "name": "pingpong",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "pingpong"
-          },
-          "link": null
-        },
-        {
-          "localized_name": "save_output",
-          "name": "save_output",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "save_output"
-          },
-          "link": null
-        },
-        {
-          "name": "pix_fmt",
-          "type": [
-            "yuv420p",
-            "p010le"
-          ],
-          "widget": {
-            "name": "pix_fmt"
-          },
-          "link": null
-        },
-        {
-          "name": "bitrate",
-          "type": "INT",
-          "widget": {
-            "name": "bitrate"
-          },
-          "link": null
-        },
-        {
-          "name": "megabit",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "megabit"
-          },
-          "link": null
-        },
-        {
-          "name": "save_metadata",
-          "type": "BOOLEAN",
-          "widget": {
-            "name": "save_metadata"
-          },
-          "link": null
-        }
+        {"localized_name": "images", "name": "images", "type": "IMAGE", "link": 27},
+        {"localized_name": "audio", "name": "audio", "shape": 7, "type": "AUDIO", "link": 28}
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "VHS_VideoCombine"
+      },
+      "widgets_values": [24, 0, "VolcEngine", "video/h264-mp4", false, true]
+    },
+    {
+      "id": 26,
+      "type": "BatchImages",
+      "pos": [-122, 355.51703078505284],
+      "size": [210, 50],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {"localized_name": "images1", "name": "images1", "type": "IMAGE", "link": 29},
+        {"localized_name": "images2", "name": "images2", "type": "IMAGE", "link": 30}
       ],
       "outputs": [
-        {
-          "localized_name": "Filenames",
-          "name": "Filenames",
-          "type": "VHS_FILENAMES",
-          "links": null
-        }
+        {"localized_name": "IMAGE", "name": "IMAGE", "type": "IMAGE", "links": [31]}
       ],
       "properties": {
-        "cnr_id": "comfyui-videohelpersuite",
-        "ver": "1.7.9",
-        "Node name for S&R": "VHS_VideoCombine",
-        "ue_properties": {
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {},
-          "version": "7.8"
-        }
-      },
-      "widgets_values": {
-        "frame_rate": 24,
-        "loop_count": 0,
-        "filename_prefix": "AnimateDiff",
-        "format": "video/nvenc_hevc-mp4",
-        "pix_fmt": "yuv420p",
-        "bitrate": 10,
-        "megabit": true,
-        "save_metadata": true,
-        "pingpong": false,
-        "save_output": false,
-        "videopreview": {
-          "hidden": false,
-          "paused": false,
-          "params": {
-            "filename": "AnimateDiff_00001-audio.mp4",
-            "subfolder": "",
-            "type": "temp",
-            "format": "video/nvenc_hevc-mp4",
-            "frame_rate": 24,
-            "workflow": "AnimateDiff_00001.png",
-            "fullpath": "D:\\ComfyUI\\temp\\AnimateDiff_00001-audio.mp4"
-          }
-        }
+        "Node name for S&R": "BatchImages"
       }
     }
   ],
   "links": [
-    [
-      17,
-      12,
-      0,
-      22,
-      0,
-      "IMAGE"
-    ],
-    [
-      18,
-      12,
-      1,
-      22,
-      1,
-      "AUDIO"
-    ],
-    [
-      21,
-      20,
-      0,
-      16,
-      0,
-      "IMAGE"
-    ],
-    [
-      27,
-      25,
-      0,
-      23,
-      0,
-      "IMAGE"
-    ],
-    [
-      28,
-      25,
-      1,
-      23,
-      1,
-      "AUDIO"
-    ],
-    [
-      29,
-      18,
-      0,
-      26,
-      0,
-      "IMAGE"
-    ],
-    [
-      30,
-      20,
-      0,
-      26,
-      1,
-      "IMAGE"
-    ],
-    [
-      31,
-      26,
-      0,
-      25,
-      0,
-      "IMAGE"
-    ],
-    [
-      32,
-      28,
-      0,
-      25,
-      1,
-      "AUDIO"
-    ]
+    [17, 12, 0, 22, 0, "IMAGE"],
+    [18, 12, 1, 22, 1, "AUDIO"],
+    [21, 20, 0, 26, 1, "IMAGE"],
+    [27, 25, 0, 23, 0, "IMAGE"],
+    [28, 25, 1, 23, 1, "AUDIO"],
+    [29, 18, 0, 26, 0, "IMAGE"],
+    [30, 20, 0, 26, 1, "IMAGE"],
+    [31, 26, 0, 25, 0, "IMAGE"]
   ],
   "groups": [],
   "config": {},
   "extra": {
-    "ue_links": [],
-    "links_added_by_ue": [],
     "ds": {
-      "scale": 0.6303940863128694,
-      "offset": [
-        1002.1981370849874,
-        572.365646737417
-      ]
+      "scale": 0.6934334949441564,
+      "offset": [813.8765868786618, 286.46107120865076]
     }
   },
   "version": 0.4
