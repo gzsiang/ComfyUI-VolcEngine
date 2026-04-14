@@ -599,15 +599,626 @@ class 火山引擎图生视频:
 
 
 # ─────────────────────────────────────────────
+# 并发抽卡辅助函数
+# ─────────────────────────────────────────────
+
+def _concurrent_run(任务数, 并发数, seeds, run_fn, log_prefix):
+    """并发执行抽卡任务，返回排序后的结果和失败列表"""
+    import concurrent.futures
+
+    all_frames = []
+    all_audios = []
+    all_infos = []
+    failed = []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(并发数, 任务数)) as executor:
+        future_map = {}
+        for idx, seed in enumerate(seeds):
+            future = executor.submit(run_fn, idx, seed)
+            future_map[future] = idx
+
+        for future in concurrent.futures.as_completed(future_map):
+            idx = future_map[future]
+            try:
+                frames_tensor, audio_dict, video_info = future.result()
+                all_frames.append((idx, frames_tensor))
+                all_audios.append((idx, audio_dict))
+                all_infos.append((idx, video_info))
+            except Exception as e:
+                print(f"[火山引擎 {log_prefix}] #{idx+1} 失败: {e}")
+                failed.append((idx, str(e)))
+
+    if not all_frames:
+        raise RuntimeError(f"所有 {任务数} 次抽卡均失败")
+
+    # 按原始顺序排列
+    all_frames.sort(key=lambda x: x[0])
+    all_audios.sort(key=lambda x: x[0])
+    all_infos.sort(key=lambda x: x[0])
+
+    return all_frames, all_audios, all_infos, failed
+
+
+def _combine_results(all_frames, all_audios):
+    """合并多组结果为一个批次"""
+    # 拼接所有帧为一个批次
+    combined_frames = torch.cat([f for _, f in all_frames], dim=0)
+
+    # 拼接所有音频
+    combined_waveforms = []
+    max_sr = 44100
+    for _, ad in all_audios:
+        wf = ad.get("waveform", torch.zeros((1, 2, 1)))
+        sr = ad.get("sample_rate", 44100)
+        max_sr = max(max_sr, sr)
+        combined_waveforms.append(wf)
+
+    try:
+        combined_audio = torch.cat(combined_waveforms, dim=2)
+        combined_audio_dict = {
+            "waveform": combined_audio,
+            "sample_rate": max_sr
+        }
+    except Exception:
+        combined_audio_dict = {
+            "waveform": torch.zeros((1, 2, 1)),
+            "sample_rate": 44100
+        }
+
+    return combined_frames, combined_audio_dict
+
+
+# ─────────────────────────────────────────────
+# 并发抽卡：文生视频（多提示词并发）
+# ─────────────────────────────────────────────
+
+class 火山引擎文生视频抽卡:
+    """火山引擎 文生视频 并发抽卡（多提示词并发提交，全部输出）"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "每行一个提示词，并发生成",
+                }),
+                "并发数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "视频时长秒": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 15,
+                    "step": 1,
+                    "display": "number",
+                }),
+                "分辨率": (["480p", "720p"], {"default": "720p"}),
+                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
+                "生成音频": ("BOOLEAN", {"default": True}),
+                "固定摄像头": ("BOOLEAN", {"default": False}),
+                "水印": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 水印,
+             随机种子=-1, 轮询间隔=10, 最大等待=600):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+
+        # 解析多行提示词
+        prompts = [p.strip() for p in 提示词.strip().split("\n") if p.strip()]
+        if not prompts:
+            raise ValueError("请填入至少一行提示词")
+
+        api = 火山引擎API(api_key.strip())
+        import concurrent.futures
+
+        def _run_single(idx, prompt_text, seed):
+            """单个任务的完整流程：提交 → 轮询 → 下载 → 解析"""
+            payload = build_payload(
+                模型=模型, 提示词=prompt_text, 图片=None, 音频=None,
+                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=False,
+                服务等级="default", 随机种子=seed, 水印=水印
+            )
+
+            task_id = api.create_task(payload)
+            print(f"[火山引擎 抽卡] #{idx+1} 任务已创建 | task_id={task_id} | 提示词={prompt_text[:30]}...")
+
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            video_url = api.extract_video_url(result)
+
+            print(f"[火山引擎 抽卡] #{idx+1} 获取视频并解析帧...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+
+            video_info["prompt"] = prompt_text
+            video_info["task_index"] = idx + 1
+            print(f"[火山引擎 抽卡] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+
+            return frames_tensor, audio_dict, video_info
+
+        # 为每个任务分配种子
+        seeds = []
+        for i in range(len(prompts)):
+            if 随机种子 == -1:
+                import random
+                seeds.append(random.randint(0, 2147483647))
+            else:
+                seeds.append(随机种子 + i)
+
+        print(f"[火山引擎 抽卡] 开始并发 {min(并发数, len(prompts))} 个任务，共 {len(prompts)} 个提示词")
+
+        all_frames, all_audios, all_infos, failed = _concurrent_run(
+            len(prompts), 并发数, seeds, _run_single, "抽卡"
+        )
+
+        combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
+
+        # 构建信息
+        result_info = {
+            "total_tasks": len(prompts),
+            "success": len(all_frames),
+            "failed": len(failed),
+            "videos": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 抽卡] 完成: {len(all_frames)}/{len(prompts)} 成功, {len(failed)} 失败")
+
+        return (combined_frames, combined_audio_dict, info_str)
+
+
+# ─────────────────────────────────────────────
+# 并发抽卡：图生视频
+# ─────────────────────────────────────────────
+
+class 火山引擎图生视频抽卡:
+    """火山引擎 图生视频 并发抽卡（同一图片+多提示词并发提交）"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "图片": ("IMAGE",),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "每行一个提示词，并发生成",
+                }),
+                "并发数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "视频时长秒": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 15,
+                    "step": 1,
+                    "display": "number",
+                }),
+                "分辨率": (["480p", "720p"], {"default": "720p"}),
+                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
+                "生成音频": ("BOOLEAN", {"default": True}),
+                "固定摄像头": ("BOOLEAN", {"default": False}),
+                "服务等级": (["default", "flex"], {"default": "default"}),
+                "水印": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "参考音频": ("AUDIO",),
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 图片, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 服务等级, 水印,
+             参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+
+        num_images = 图片.shape[0]
+        if num_images > 9:
+            raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
+
+        # 解析多行提示词
+        prompts = [p.strip() for p in 提示词.strip().split("\n") if p.strip()]
+        if not prompts:
+            # 没有提示词时，用空提示词并发抽卡（纯抽不同种子）
+            prompts = [""] * 并发数
+
+        api = 火山引擎API(api_key.strip())
+        import concurrent.futures
+
+        def _run_single(idx, prompt_text, seed):
+            """单个任务的完整流程"""
+            payload = build_payload(
+                模型=模型, 提示词=prompt_text, 图片=图片, 音频=参考音频,
+                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=False,
+                服务等级=服务等级, 随机种子=seed, 水印=水印
+            )
+
+            task_id = api.create_task(payload)
+            print(f"[火山引擎 图抽卡] #{idx+1} 任务已创建 | task_id={task_id}")
+
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            video_url = api.extract_video_url(result)
+
+            print(f"[火山引擎 图抽卡] #{idx+1} 获取视频并解析帧...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+
+            video_info["prompt"] = prompt_text
+            video_info["task_index"] = idx + 1
+            print(f"[火山引擎 图抽卡] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+
+            return frames_tensor, audio_dict, video_info
+
+        # 为每个任务分配种子
+        seeds = []
+        for i in range(len(prompts)):
+            if 随机种子 == -1:
+                import random
+                seeds.append(random.randint(0, 2147483647))
+            else:
+                seeds.append(随机种子 + i)
+
+        # 描述模式
+        if num_images == 1:
+            mode_desc = "首帧模式"
+        elif num_images == 2:
+            mode_desc = "首尾帧模式"
+        else:
+            mode_desc = f"多参考图模式 ({num_images}张)"
+
+        print(f"[火山引擎 图抽卡] 模式={mode_desc} | 开始并发 {min(并发数, len(prompts))} 个任务，共 {len(prompts)} 个")
+
+        all_frames, all_audios, all_infos, failed = _concurrent_run(
+            len(prompts), 并发数, seeds, _run_single, "图抽卡"
+        )
+
+        combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
+
+        # 构建信息
+        result_info = {
+            "total_tasks": len(prompts),
+            "success": len(all_frames),
+            "failed": len(failed),
+            "mode": mode_desc,
+            "videos": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 图抽卡] 完成: {len(all_frames)}/{len(prompts)} 成功, {len(failed)} 失败")
+
+        return (combined_frames, combined_audio_dict, info_str)
+
+
+# ─────────────────────────────────────────────
+# 种子抽卡：文生视频（同一提示词，不同种子并发）
+# ─────────────────────────────────────────────
+
+class 火山引擎文生视频种子抽卡:
+    """火山引擎 文生视频 种子抽卡（同一提示词，不同种子并发提交，全部输出）"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "描述你想生成的视频内容",
+                }),
+                "抽卡次数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "并发数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "视频时长秒": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 15,
+                    "step": 1,
+                    "display": "number",
+                }),
+                "分辨率": (["480p", "720p"], {"default": "720p"}),
+                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
+                "生成音频": ("BOOLEAN", {"default": True}),
+                "固定摄像头": ("BOOLEAN", {"default": False}),
+                "水印": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 提示词, 抽卡次数, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 水印,
+             随机种子=-1, 轮询间隔=10, 最大等待=600):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+        if not 提示词.strip():
+            raise ValueError("请填入提示词")
+
+        api = 火山引擎API(api_key.strip())
+        import concurrent.futures
+        import random
+
+        # 为每次抽卡分配不同种子
+        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(抽卡次数)]
+
+        def _run_single(idx, seed):
+            payload = build_payload(
+                模型=模型, 提示词=提示词, 图片=None, 音频=None,
+                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=False,
+                服务等级="default", 随机种子=seed, 水印=水印
+            )
+            task_id = api.create_task(payload)
+            print(f"[火山引擎 种子抽卡] #{idx+1}/{抽卡次数} seed={seed} | task_id={task_id}")
+
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            video_url = api.extract_video_url(result)
+
+            print(f"[火山引擎 种子抽卡] #{idx+1} 获取视频并解析帧...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+            video_info["seed"] = seed
+            video_info["task_index"] = idx + 1
+            print(f"[火山引擎 种子抽卡] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+            return frames_tensor, audio_dict, video_info
+
+        print(f"[火山引擎 种子抽卡] 开始并发 {min(并发数, 抽卡次数)} 个任务，共抽 {抽卡次数} 次 | base_seed={base_seed}")
+
+        all_frames, all_audios, all_infos, failed = _concurrent_run(
+            抽卡次数, 并发数, seeds, _run_single, "种子抽卡"
+        )
+
+        combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
+
+        result_info = {
+            "mode": "种子抽卡",
+            "total_tasks": 抽卡次数,
+            "success": len(all_frames),
+            "failed": len(failed),
+            "base_seed": base_seed,
+            "seeds": seeds,
+            "videos": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 种子抽卡] 完成: {len(all_frames)}/{抽卡次数} 成功, {len(failed)} 失败")
+
+        return (combined_frames, combined_audio_dict, info_str)
+
+
+# ─────────────────────────────────────────────
+# 种子抽卡：图生视频（同一图片+提示词，不同种子并发）
+# ─────────────────────────────────────────────
+
+class 火山引擎图生视频种子抽卡:
+    """火山引擎 图生视频 种子抽卡（同一图片+提示词，不同种子并发提交，全部输出）"""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "图片": ("IMAGE",),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "描述运动方式（可留空）",
+                }),
+                "抽卡次数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "并发数": ("INT", {
+                    "default": 3,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "视频时长秒": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 15,
+                    "step": 1,
+                    "display": "number",
+                }),
+                "分辨率": (["480p", "720p"], {"default": "720p"}),
+                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
+                "生成音频": ("BOOLEAN", {"default": True}),
+                "固定摄像头": ("BOOLEAN", {"default": False}),
+                "服务等级": (["default", "flex"], {"default": "default"}),
+                "水印": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
+                "参考音频": ("AUDIO",),
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 图片, 提示词, 抽卡次数, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 服务等级, 水印,
+             参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+
+        num_images = 图片.shape[0]
+        if num_images > 9:
+            raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
+
+        api = 火山引擎API(api_key.strip())
+        import concurrent.futures
+        import random
+
+        # 为每次抽卡分配不同种子
+        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(抽卡次数)]
+
+        # 描述模式
+        if num_images == 1:
+            mode_desc = "首帧模式"
+        elif num_images == 2:
+            mode_desc = "首尾帧模式"
+        else:
+            mode_desc = f"多参考图模式 ({num_images}张)"
+
+        def _run_single(idx, seed):
+            payload = build_payload(
+                模型=模型, 提示词=提示词, 图片=图片, 音频=参考音频,
+                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=False,
+                服务等级=服务等级, 随机种子=seed, 水印=水印
+            )
+            task_id = api.create_task(payload)
+            print(f"[火山引擎 图种子抽卡] #{idx+1}/{抽卡次数} seed={seed} | task_id={task_id}")
+
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            video_url = api.extract_video_url(result)
+
+            print(f"[火山引擎 图种子抽卡] #{idx+1} 获取视频并解析帧...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+            video_info["seed"] = seed
+            video_info["task_index"] = idx + 1
+            print(f"[火山引擎 图种子抽卡] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+            return frames_tensor, audio_dict, video_info
+
+        print(f"[火山引擎 图种子抽卡] 模式={mode_desc} | 开始并发 {min(并发数, 抽卡次数)} 个任务，共抽 {抽卡次数} 次 | base_seed={base_seed}")
+
+        all_frames, all_audios, all_infos, failed = _concurrent_run(
+            抽卡次数, 并发数, seeds, _run_single, "图种子抽卡"
+        )
+
+        combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
+
+        result_info = {
+            "mode": "种子抽卡",
+            "image_mode": mode_desc,
+            "total_tasks": 抽卡次数,
+            "success": len(all_frames),
+            "failed": len(failed),
+            "base_seed": base_seed,
+            "seeds": seeds,
+            "videos": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 图种子抽卡] 完成: {len(all_frames)}/{抽卡次数} 成功, {len(failed)} 失败")
+
+        return (combined_frames, combined_audio_dict, info_str)
+
+
+# ─────────────────────────────────────────────
 # 注册映射
 # ─────────────────────────────────────────────
 
 NODE_CLASS_MAPPINGS = {
     "火山引擎文生视频": 火山引擎文生视频,
     "火山引擎图生视频": 火山引擎图生视频,
+    "火山引擎文生视频抽卡": 火山引擎文生视频抽卡,
+    "火山引擎图生视频抽卡": 火山引擎图生视频抽卡,
+    "火山引擎文生视频种子抽卡": 火山引擎文生视频种子抽卡,
+    "火山引擎图生视频种子抽卡": 火山引擎图生视频种子抽卡,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "火山引擎文生视频": "🎬 火山引擎 文生视频",
     "火山引擎图生视频": "🎬 火山引擎 图生视频",
+    "火山引擎文生视频抽卡": "🎰 火山引擎 文生视频·抽卡",
+    "火山引擎图生视频抽卡": "🎰 火山引擎 图生视频·抽卡",
+    "火山引擎文生视频种子抽卡": "🎲 火山引擎 文生视频·种子抽卡",
+    "火山引擎图生视频种子抽卡": "🎲 火山引擎 图生视频·种子抽卡",
 }
