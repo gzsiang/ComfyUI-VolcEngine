@@ -51,6 +51,28 @@ FALLBACK_MODELS = [
 MODEL_CACHE = {}
 
 
+def fetch_available_models(api_key: str) -> list[str]:
+    """从火山引擎 API 拉取可用模型列表"""
+    url = "https://ark.cn-beijing.volces.com/api/v3/models"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.get(url, headers=headers, timeout=30)
+        if not resp.ok:
+            return []
+        data = resp.json()
+        models = []
+        for model in data.get("data", []):
+            model_id = model.get("id", "")
+            if "seedance" in model_id.lower() or "seedream" in model_id.lower():
+                models.append(model_id)
+        return sorted(models)
+    except Exception:
+        return []
+
+
 # ─────────────────────────────────────────────
 # 工具函数
 # ─────────────────────────────────────────────
@@ -206,11 +228,28 @@ class 火山引擎API:
             "Content-Type": "application/json",
         }
 
-    def create_task(self, payload: dict) -> str:
+    def create_task(self, payload: dict, api_key: str = None) -> str:
         """创建视频生成任务，返回 task_id"""
         url = f"{self.BASE_URL}/tasks"
         resp = requests.post(url, json=payload, headers=self.headers, timeout=60)
         if not resp.ok:
+            # 如果是 404 模型不存在，尝试拉取可用模型列表
+            if resp.status_code == 404:
+                try:
+                    error_data = resp.json()
+                    if "NotFound" in str(error_data):
+                        key = api_key or self.api_key
+                        if key not in MODEL_CACHE:
+                            print("[火山引擎] 模型不存在，正在获取可用模型列表...")
+                            MODEL_CACHE[key] = fetch_available_models(key)
+                        if MODEL_CACHE[key]:
+                            print("\n" + "=" * 60)
+                            print("[火山引擎] 可用模型列表：")
+                            for i, m in enumerate(MODEL_CACHE[key], 1):
+                                print(f"  {i}. {m}")
+                            print("=" * 60 + "\n")
+                except Exception:
+                    pass
             raise RuntimeError(f"创建任务失败 [{resp.status_code}]: {resp.text}")
         data = resp.json()
         task_id = data.get("id") or data.get("task_id")
@@ -406,204 +445,16 @@ def build_payload(模型, 提示词="", 图片=None, 音频=None, 视频时长=5
 
 
 # ─────────────────────────────────────────────
-# 文生视频节点
+# 并发生成辅助函数
 # ─────────────────────────────────────────────
 
-class 火山引擎文生视频:
-    """火山引擎 文生视频（纯文本生成视频）→ 输出帧+音频+信息"""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "api_key": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "placeholder": "火山引擎方舟 API Key",
-                }),
-                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
-                "提示词": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "描述你想生成的视频内容",
-                }),
-                "视频时长秒": ("INT", {
-                    "default": 5,
-                    "min": 4,
-                    "max": 15,
-                    "step": 1,
-                    "display": "number",
-                }),
-                "分辨率": (["480p", "720p"], {"default": "720p"}),
-                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
-                "生成音频": ("BOOLEAN", {"default": True}),
-                "固定摄像头": ("BOOLEAN", {"default": False}),
-                "返回尾帧": ("BOOLEAN", {"default": False}),
-                "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": True}),
-            },
-            "optional": {
-                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
-                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
-                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
-    RETURN_NAMES = ("视频帧", "音频", "视频信息")
-    OUTPUT_NODE = True
-    FUNCTION = "生成"
-    CATEGORY = "火山引擎"
-
-    def 生成(self, api_key, 模型, 提示词, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
-             随机种子=-1, 轮询间隔=10, 最大等待=600):
-
-        if not api_key.strip():
-            raise ValueError("请填入火山引擎方舟 API Key")
-        if not 模型.strip():
-            raise ValueError("请选择模型")
-        if not 提示词.strip():
-            raise ValueError("请填入提示词")
-
-        api = 火山引擎API(api_key.strip())
-
-        payload = build_payload(
-            模型=模型, 提示词=提示词, 图片=None, 音频=None,
-            视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
-            生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
-            服务等级=服务等级, 随机种子=随机种子, 水印=水印
-        )
-
-        desc_parts = [f"模型={模型}", f"时长={视频时长秒}s", f"分辨率={分辨率}", f"宽高比={宽高比}", f"水印={水印}"]
-        if 服务等级 == "flex":
-            desc_parts.append("离线推理")
-        print(f"[火山引擎 文生视频] {' | '.join(desc_parts)}")
-
-        task_id = api.create_task(payload)
-        print(f"[火山引擎 文生视频] 任务已创建 | task_id={task_id}")
-
-        result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
-        video_url = api.extract_video_url(result)
-
-        print(f"[火山引擎 文生视频] 获取视频并解析帧...")
-        frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
-
-        info_str = json.dumps(video_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 文生视频] 解析完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
-
-        return (frames_tensor, audio_dict, info_str)
-
-
-# ─────────────────────────────────────────────
-# 图生视频节点
-# ─────────────────────────────────────────────
-
-class 火山引擎图生视频:
-    """火山引擎 图生视频（支持多图+参考音频）→ 输出帧+音频+信息"""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "api_key": ("STRING", {
-                    "default": "",
-                    "multiline": False,
-                    "placeholder": "火山引擎方舟 API Key",
-                }),
-                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
-                "图片": ("IMAGE",),
-                "提示词": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "placeholder": "描述运动方式（可留空）",
-                }),
-                "视频时长秒": ("INT", {
-                    "default": 5,
-                    "min": 4,
-                    "max": 15,
-                    "step": 1,
-                    "display": "number",
-                }),
-                "分辨率": (["480p", "720p"], {"default": "720p"}),
-                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
-                "生成音频": ("BOOLEAN", {"default": True}),
-                "固定摄像头": ("BOOLEAN", {"default": False}),
-                "返回尾帧": ("BOOLEAN", {"default": False}),
-                "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": True}),
-            },
-            "optional": {
-                "参考音频": ("AUDIO",),
-                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
-                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
-                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
-            }
-        }
-
-    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
-    RETURN_NAMES = ("视频帧", "音频", "视频信息")
-    OUTPUT_NODE = True
-    FUNCTION = "生成"
-    CATEGORY = "火山引擎"
-
-    def 生成(self, api_key, 模型, 图片, 提示词, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
-             参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
-
-        if not api_key.strip():
-            raise ValueError("请填入火山引擎方舟 API Key")
-        if not 模型.strip():
-            raise ValueError("请选择模型")
-
-        num_images = 图片.shape[0]
-        if num_images > 9:
-            raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
-
-        api = 火山引擎API(api_key.strip())
-
-        payload = build_payload(
-            模型=模型, 提示词=提示词, 图片=图片, 音频=参考音频,
-            视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
-            生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
-            服务等级=服务等级, 随机种子=随机种子, 水印=水印
-        )
-
-        # 描述模式
-        if num_images == 1:
-            mode_desc = "首帧模式"
-        elif num_images == 2:
-            mode_desc = "首尾帧模式"
-        else:
-            mode_desc = f"多参考图模式 ({num_images}张)"
-
-        if 参考音频 is not None:
-            mode_desc += "+参考音频"
-
-        desc_parts = [f"模型={模型}", f"模式={mode_desc}", f"时长={视频时长秒}s", f"分辨率={分辨率}", f"宽高比={宽高比}", f"水印={水印}"]
-        if 服务等级 == "flex":
-            desc_parts.append("离线推理")
-        print(f"[火山引擎 图生视频] {' | '.join(desc_parts)}")
-
-        task_id = api.create_task(payload)
-        print(f"[火山引擎 图生视频] 任务已创建 | task_id={task_id}")
-
-        result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
-        video_url = api.extract_video_url(result)
-
-        print(f"[火山引擎 图生视频] 获取视频并解析帧...")
-        frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
-
-        info_str = json.dumps(video_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 图生视频] 解析完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
-
-        return (frames_tensor, audio_dict, info_str)
-
-
-# ─────────────────────────────────────────────
-# 并发抽卡辅助函数
-# ─────────────────────────────────────────────
-
-def _concurrent_run(任务数, 并发数, seeds, run_fn, log_prefix):
-    """并发执行抽卡任务，返回排序后的结果和失败列表"""
+def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
+    """
+    并发执行任务
+    
+    tasks: [(prompt, seed), ...] 或 [(image, prompt, seed), ...]
+    run_fn: function(idx, task) -> (frames, audio, info)
+    """
     import concurrent.futures
 
     all_frames = []
@@ -613,8 +464,8 @@ def _concurrent_run(任务数, 并发数, seeds, run_fn, log_prefix):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(并发数, 任务数)) as executor:
         future_map = {}
-        for idx, seed in enumerate(seeds):
-            future = executor.submit(run_fn, idx, seed)
+        for idx, task in enumerate(tasks):
+            future = executor.submit(run_fn, idx, task)
             future_map[future] = idx
 
         for future in concurrent.futures.as_completed(future_map):
@@ -629,7 +480,7 @@ def _concurrent_run(任务数, 并发数, seeds, run_fn, log_prefix):
                 failed.append((idx, str(e)))
 
     if not all_frames:
-        raise RuntimeError(f"所有 {任务数} 次抽卡均失败")
+        raise RuntimeError(f"所有 {任务数} 次任务均失败")
 
     # 按原始顺序排列
     all_frames.sort(key=lambda x: x[0])
@@ -669,14 +520,13 @@ def _combine_results(all_frames, all_audios):
 
 
 # ─────────────────────────────────────────────
-# 通用抽卡节点（文生/图生 合一）
+# 文生视频节点
 # ─────────────────────────────────────────────
 
-class 火山引擎并发:
-    """火山引擎 并发生成节点（接图片=图生并发，不接=文生并发）
-
-    同一提示词并发 N 次，每次使用不同种子，提高出片效率。
-    如需重复生成，直接在 ComfyUI 中复制节点连线即可。
+class 火山引擎文生视频:
+    """火山引擎 文生视频
+    
+    并发数 > 1 时：抽卡模式（同一提示词，不同种子）
     """
 
     @classmethod
@@ -695,7 +545,7 @@ class 火山引擎并发:
                     "placeholder": "描述你想生成的视频内容",
                 }),
                 "并发数": ("INT", {
-                    "default": 3,
+                    "default": 1,
                     "min": 1,
                     "max": 10,
                     "step": 1,
@@ -711,11 +561,145 @@ class 火山引擎并发:
                 "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
                 "生成音频": ("BOOLEAN", {"default": True}),
                 "固定摄像头": ("BOOLEAN", {"default": False}),
+                "返回尾帧": ("BOOLEAN", {"default": False}),
                 "服务等级": (["default", "flex"], {"default": "default"}),
                 "水印": ("BOOLEAN", {"default": True}),
             },
             "optional": {
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
+    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
+             随机种子=-1, 轮询间隔=10, 最大等待=600):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+        if not 提示词.strip():
+            raise ValueError("请填入提示词")
+
+        api = 火山引擎API(api_key.strip())
+        import random
+
+        # 生成种子列表
+        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(并发数)]
+
+        log_prefix = "文生视频"
+
+        desc_parts = [f"模型={模型}", f"任务数={并发数}"]
+        if 服务等级 == "flex":
+            desc_parts.append("离线推理")
+        print(f"[火山引擎 {log_prefix}] {' | '.join(desc_parts)}")
+
+        def _run_single(idx, seed):
+            payload = build_payload(
+                模型=模型, 提示词=提示词, 图片=None, 音频=None,
+                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
+                服务等级="default", 随机种子=seed, 水印=水印
+            )
+            task_id = api.create_task(payload, api_key=api_key.strip())
+            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
+
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            video_url = api.extract_video_url(result)
+
+            print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+
+            video_info["seed"] = seed
+            video_info["task_index"] = idx + 1
+            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+
+            return frames_tensor, audio_dict, video_info
+
+        # 任务列表：(seed,)
+        tasks = [(s,) for s in seeds]
+        
+        all_frames, all_audios, all_infos, failed = _concurrent_run(
+            并发数, 并发数, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
+        )
+
+        combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
+
+        # 构建信息
+        result_info = {
+            "type": "文生视频",
+            "total_tasks": 并发数,
+            "success": len(all_frames),
+            "failed": len(failed),
+            "base_seed": base_seed,
+            "seeds": seeds,
+            "videos": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 {log_prefix}] 完成: {len(all_frames)}/{并发数} 成功, {len(failed)} 失败")
+
+        return (combined_frames, combined_audio_dict, info_str)
+
+
+# ─────────────────────────────────────────────
+# 图生视频节点
+# ─────────────────────────────────────────────
+
+class 火山引擎图生视频:
+    """火山引擎 图生视频（支持多图+参考音频）
+    
+    并发数 > 1 时：抽卡模式（同一配置，不同种子）
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
                 "图片": ("IMAGE",),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "描述运动方式（可留空）",
+                }),
+                "并发数": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "视频时长秒": ("INT", {
+                    "default": 5,
+                    "min": 4,
+                    "max": 15,
+                    "step": 1,
+                    "display": "number",
+                }),
+                "分辨率": (["480p", "720p"], {"default": "720p"}),
+                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
+                "生成音频": ("BOOLEAN", {"default": True}),
+                "固定摄像头": ("BOOLEAN", {"default": False}),
+                "返回尾帧": ("BOOLEAN", {"default": False}),
+                "服务等级": (["default", "flex"], {"default": "default"}),
+                "水印": ("BOOLEAN", {"default": True}),
+            },
+            "optional": {
                 "参考音频": ("AUDIO",),
                 "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
                 "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
@@ -729,90 +713,90 @@ class 火山引擎并发:
     FUNCTION = "生成"
     CATEGORY = "火山引擎"
 
-    def 生成(self, api_key, 模型, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 服务等级, 水印,
-             图片=None, 参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
+    def 生成(self, api_key, 模型, 图片, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
+             参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
 
         if not api_key.strip():
             raise ValueError("请填入火山引擎方舟 API Key")
         if not 模型.strip():
             raise ValueError("请选择模型")
 
-        is_image_mode = 图片 is not None
-        mode_prefix = "图生并发" if is_image_mode else "文生并发"
-
-        if not 提示词.strip() and not is_image_mode:
-            raise ValueError("请填入提示词")
-
-        # 图片校验
-        if is_image_mode:
-            num_images = 图片.shape[0]
-            if num_images > 9:
-                raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
-            if num_images == 1:
-                img_mode_desc = "首帧模式"
-            elif num_images == 2:
-                img_mode_desc = "首尾帧模式"
-            else:
-                img_mode_desc = f"多参考图模式 ({num_images}张)"
-        else:
-            img_mode_desc = None
+        num_images = 图片.shape[0]
+        if num_images > 9:
+            raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
 
         api = 火山引擎API(api_key.strip())
         import random
 
-        task_count = 并发数
+        # 描述模式
+        if num_images == 1:
+            mode_desc = "首帧模式"
+        elif num_images == 2:
+            mode_desc = "首尾帧模式"
+        else:
+            mode_desc = f"多参考图模式 ({num_images}张)"
+
+        if 参考音频 is not None:
+            mode_desc += "+参考音频"
+
+        # 生成种子列表
         base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
-        seeds = [base_seed + i for i in range(task_count)]
+        seeds = [base_seed + i for i in range(并发数)]
+        
+        log_prefix = "图生视频"
+        
+        desc_parts = [f"模型={模型}", f"模式={mode_desc}", f"任务数={并发数}", f"时长={视频时长秒}s"]
+        if 服务等级 == "flex":
+            desc_parts.append("离线推理")
+        print(f"[火山引擎 {log_prefix}] {' | '.join(desc_parts)}")
 
         def _run_single(idx, seed):
             payload = build_payload(
                 模型=模型, 提示词=提示词, 图片=图片, 音频=参考音频,
                 视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
-                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=False,
-                服务等级=服务等级 if is_image_mode else "default",
-                随机种子=seed, 水印=水印
+                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
+                服务等级=服务等级, 随机种子=seed, 水印=水印
             )
-            task_id = api.create_task(payload)
-            print(f"[火山引擎 {mode_prefix}] #{idx+1}/{task_count} seed={seed} | task_id={task_id}")
+            task_id = api.create_task(payload, api_key=api_key.strip())
+            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
 
             result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
             video_url = api.extract_video_url(result)
 
-            print(f"[火山引擎 {mode_prefix}] #{idx+1} 获取视频并解析帧...")
+            print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
             frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
 
             video_info["seed"] = seed
             video_info["task_index"] = idx + 1
-            print(f"[火山引擎 {mode_prefix}] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
 
             return frames_tensor, audio_dict, video_info
 
-        print(f"[火山引擎 {mode_prefix}] 并发 {task_count} 次 | base_seed={base_seed}"
-              + (f" | {img_mode_desc}" if img_mode_desc else ""))
+        # 任务列表：(seed,)
+        tasks = [(s,) for s in seeds]
 
         all_frames, all_audios, all_infos, failed = _concurrent_run(
-            task_count, 并发数, seeds, _run_single, mode_prefix
+            并发数, 并发数, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
         )
 
         combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
 
         # 构建信息
         result_info = {
-            "type": "图生视频" if is_image_mode else "文生视频",
-            "concurrent": task_count,
+            "type": "图生视频",
+            "mode": mode_desc,
+            "total_tasks": 并发数,
             "success": len(all_frames),
             "failed": len(failed),
             "base_seed": base_seed,
             "seeds": seeds,
             "videos": [info for _, info in all_infos],
         }
-        if img_mode_desc:
-            result_info["image_mode"] = img_mode_desc
         if failed:
             result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
 
         info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 {mode_prefix}] 完成: {len(all_frames)}/{task_count} 成功, {len(failed)} 失败")
+        print(f"[火山引擎 {log_prefix}] 完成: {len(all_frames)}/{并发数} 成功, {len(failed)} 失败")
 
         return (combined_frames, combined_audio_dict, info_str)
 
@@ -824,11 +808,9 @@ class 火山引擎并发:
 NODE_CLASS_MAPPINGS = {
     "火山引擎文生视频": 火山引擎文生视频,
     "火山引擎图生视频": 火山引擎图生视频,
-    "火山引擎并发": 火山引擎并发,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "火山引擎文生视频": "🎬 火山引擎 文生视频",
     "火山引擎图生视频": "🎬 火山引擎 图生视频",
-    "火山引擎并发": "⚡ 火山引擎 并发",
 }
