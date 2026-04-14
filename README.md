@@ -1,0 +1,188 @@
+# ComfyUI 火山引擎视频生成节点
+
+🎬 **ComfyUI Custom Node for VolcEngine (火山引擎) Video Generation**
+
+基于火山引擎方舟 API 的视频生成自定义节点，支持 Seedance 系列模型（包括最新的 Seedance 2.0）。
+
+---
+
+## ✨ 功能特性
+
+- **文生视频**：纯文本描述生成视频
+- **图生视频**：支持单图（首帧）、双图（首尾帧）、多图（参考图）模式
+- **参考音频**：支持传入音频作为角色音色参考（Seedance 2.0）
+- **多模型支持**：Seedance 2.0 / 1.5 / 1.0 系列
+- **完整参数**：分辨率、宽高比、生成音频、固定摄像头、服务等级等
+
+---
+
+## 📦 安装
+
+### 方法1：直接克隆到 custom_nodes
+
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/YOUR_USERNAME/ComfyUI-VolcEngine-Video.git
+```
+
+### 方法2：手动安装
+
+1. 下载本仓库代码
+2. 解压到 `ComfyUI/custom_nodes/ComfyUI-VolcEngine-Video/`
+3. 重启 ComfyUI
+
+---
+
+## 🔑 获取 API Key
+
+1. 访问 [火山引擎控制台](https://console.volcengine.com/)
+2. 进入「方舟」服务
+3. 创建 API Key
+4. 开通视频生成模型权限（Seedance 系列）
+
+---
+
+## 🚀 使用方法
+
+### 节点说明
+
+| 节点名称 | 功能 | 输入 |
+|---------|------|------|
+| 🎬 火山引擎 文生视频 | 文本生成视频 | API Key、模型、提示词、参数 |
+| 🎬 火山引擎 图生视频 | 图片生成视频 | API Key、模型、图片、提示词、参数 |
+
+### 图生视频模式
+
+根据输入图片数量自动判断：
+
+| 图片数量 | 模式 | 说明 |
+|---------|------|------|
+| 1张 | 首帧模式 | 以该图为视频起始帧 |
+| 2张 | 首尾帧模式 | 第一张为起始，第二张为结束 |
+| 3-9张 | 多参考图模式 | 作为风格/内容参考 |
+
+### 参考音频
+
+- 传入音频后，生成的视频会使用该音频的音色
+- **注意**：使用参考音频时必须同时传入至少1张图片
+
+---
+
+## ⚙️ 参数说明
+
+### 通用参数
+
+| 参数 | 类型 | 范围 | 默认值 | 说明 |
+|-----|------|------|-------|------|
+| API Key | String | - | - | 火山引擎方舟 API Key |
+| 模型 | 下拉 | - | doubao-seedance-2-0-260128 | 视频生成模型 |
+| 提示词 | String | - | - | 视频内容描述 |
+| 视频时长(秒) | Int | 4-15 | 5 | 生成视频时长 |
+| 分辨率 | 下拉 | 480p/720p | 720p | 视频分辨率 |
+| 宽高比 | 下拉 | 多种 | 16:9(文生)/adaptive(图生) | 视频宽高比 |
+| 水印 | Boolean | - | True | 是否添加水印 |
+| 随机种子 | Int | -1~∞ | -1 | -1为随机 |
+| 轮询间隔 | Int | 3-30 | 10 | 任务状态查询间隔(秒) |
+| 最大等待 | Int | 60-1800 | 600 | 最大等待时间(秒) |
+
+### Seedance 2.0 特有参数
+
+| 参数 | 类型 | 默认值 | 说明 |
+|-----|------|-------|------|
+| 生成音频 | Boolean | True | 是否生成视频音频 |
+| 固定摄像头 | Boolean | False | 固定摄像机视角 |
+| 返回尾帧 | Boolean | False | 同时返回最后一帧图片 |
+| 服务等级 | 下拉 | default | default(标准)/flex(离线，便宜约50%) |
+
+---
+
+## 📋 支持的模型
+
+### Seedance 2.0（推荐）
+- `doubao-seedance-2-0-260128` - 最新版本，支持多模态参考
+
+### Seedance 1.5
+- `doubao-seedance-1-5-pro-251215`
+
+### Seedance 1.0
+- `doubao-seedance-1-0-pro-250528`
+- `doubao-seedance-1-0-pro`
+- `doubao-seedance-1-0-pro-fast`
+- `doubao-seedance-1-0-lite`
+
+### Seedream（图像生成）
+- `doubao-seedream-5-0`
+- `doubao-seedream-4-5-251128`
+- `doubao-seedream-4-0-250828`
+- `doubao-seedream-3-1-250312`
+
+---
+
+## 📁 工作流示例
+
+仓库包含示例工作流文件：
+
+- `workflows/火山API测试.json` - 基础测试工作流
+
+导入方法：ComfyUI 界面 → Load → 选择 json 文件
+
+---
+
+## 🔄 输出格式
+
+两个节点均输出3个端口：
+
+| 端口 | 类型 | 说明 |
+|-----|------|------|
+| 视频帧 | IMAGE | 视频帧序列，可连接 VHS 等节点预览/保存 |
+| 音频 | AUDIO | 视频音频，可连接音频输出节点 |
+| 视频信息 | STRING | JSON格式的视频元数据（fps、帧数、时长等） |
+
+---
+
+## 🛠️ 技术说明
+
+### API 端点
+```
+POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
+```
+
+### Seedance 2.0 多模态格式
+```json
+{
+  "model": "doubao-seedance-2-0-260128",
+  "input": [
+    {"type": "text", "text": "提示词"},
+    {"type": "image_url", "image_url": {...}, "role": "first_frame"},
+    {"type": "audio_url", "audio_url": {...}, "role": "reference_audio"}
+  ],
+  "duration": 5,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": true,
+  "watermark": true
+}
+```
+
+---
+
+## ⚠️ 注意事项
+
+1. **API Key 安全**：不要在分享工作流时泄露你的 API Key
+2. **图片限制**：图生视频最多支持 9 张图片
+3. **分辨率限制**：Seedance 2.0 最高支持 720p，旧版最高支持 1080p
+4. **音频参考**：必须同时提供图片才能使用参考音频功能
+5. **服务等级**：`flex` 模式为离线推理，价格约便宜 50%，但等待时间可能更长
+
+---
+
+## 📄 许可证
+
+MIT License
+
+---
+
+## 🔗 相关链接
+
+- [火山引擎文档](https://www.volcengine.com/docs/82379/1520757)
+- [ComfyUI 官方仓库](https://github.com/comfyanonymous/ComfyUI)
