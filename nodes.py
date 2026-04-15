@@ -30,8 +30,9 @@ import torch
 # 公共资源：预置模型列表（兜底）
 # ─────────────────────────────────────────────
 
+# 视频生成模型
 FALLBACK_MODELS = [
-    # Seedance 2.0 系列（从 API 返回确认的名称）
+    # Seedance 2.0 系列
     "doubao-seedance-2-0-260128",
     # Seedance 1.5 系列
     "doubao-seedance-1-5-pro-251215",
@@ -40,10 +41,17 @@ FALLBACK_MODELS = [
     "doubao-seedance-1-0-pro",
     "doubao-seedance-1-0-pro-fast",
     "doubao-seedance-1-0-lite",
-    # Seedream 系列
+]
+
+# 图像生成模型
+FALLBACK_IMAGE_MODELS = [
+    # Seedream 5.0 系列
     "doubao-seedream-5-0",
+    # Seedream 4.5 系列
     "doubao-seedream-4-5-251128",
+    # Seedream 4.0 系列
     "doubao-seedream-4-0-250828",
+    # Seedream 3.x 系列
     "doubao-seedream-3-1-250312",
 ]
 
@@ -802,15 +810,233 @@ class 火山引擎图生视频:
 
 
 # ─────────────────────────────────────────────
+# 图像生成节点
+# ─────────────────────────────────────────────
+
+class 火山引擎图像生成:
+    """火山引擎 图像生成
+    
+    支持：
+    - 文生图：提示词生成图片
+    - 图生图：参考图片 + 提示词生成新图片
+    - 并发生成：同一配置不同种子
+    
+    API 端点: /api/v3/images/generations（同步返回）
+    """
+    
+    IMAGE_API_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "api_key": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "placeholder": "火山引擎方舟 API Key",
+                }),
+                "模型": (FALLBACK_IMAGE_MODELS, {"default": FALLBACK_IMAGE_MODELS[0]}),
+                "提示词": ("STRING", {
+                    "default": "",
+                    "multiline": True,
+                    "placeholder": "描述你想生成的图片内容",
+                }),
+                "并发数": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                }),
+                "图片尺寸": (["1024x1024", "2048x2048", "3072x3072", "4096x4096", "1280x720", "1920x1080"], {"default": "1024x1024"}),
+                "水印": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                "参考图片": ("IMAGE",),
+                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "STRING")
+    RETURN_NAMES = ("图片", "生成信息")
+    OUTPUT_NODE = True
+    FUNCTION = "生成"
+    CATEGORY = "火山引擎"
+
+    def 生成(self, api_key, 模型, 提示词, 并发数, 图片尺寸, 水印,
+             参考图片=None, 随机种子=-1):
+
+        if not api_key.strip():
+            raise ValueError("请填入火山引擎方舟 API Key")
+        if not 模型.strip():
+            raise ValueError("请选择模型")
+        if not 提示词.strip() and 参考图片 is None:
+            raise ValueError("请填入提示词或提供参考图片")
+
+        import random
+
+        headers = {
+            "Authorization": f"Bearer {api_key.strip()}",
+            "Content-Type": "application/json",
+        }
+
+        # 生成种子列表
+        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(并发数)]
+
+        log_prefix = "图像生成"
+
+        mode_desc = "图生图" if 参考图片 is not None else "文生图"
+        print(f"[火山引擎 {log_prefix}] 模型={模型} | 模式={mode_desc} | 任务数={并发数} | 尺寸={图片尺寸}")
+
+        def _run_single(idx, seed):
+            # 构建图像生成 payload
+            payload = {
+                "model": 模型.strip(),
+                "prompt": 提示词.strip(),
+                "size": 图片尺寸,
+                "watermark": 水印,
+                "response_format": "url",
+            }
+            
+            if seed != -1:
+                payload["seed"] = seed
+
+            # 参考图片：转换为 URL 或 base64
+            if 参考图片 is not None:
+                b64_list = tensors_to_base64_list(参考图片)
+                if len(b64_list) == 1:
+                    payload["image"] = f"data:image/jpeg;base64,{b64_list[0]}"
+                else:
+                    # 多图使用 image, image2, image3...
+                    for i, b64 in enumerate(b64_list[:10]):  # 最多10张
+                        if i == 0:
+                            payload["image"] = f"data:image/jpeg;base64,{b64}"
+                        else:
+                            payload[f"image{i+1}"] = f"data:image/jpeg;base64,{b64}"
+
+            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | 请求中...")
+
+            # 直接调用图像生成 API（同步）
+            resp = requests.post(self.IMAGE_API_URL, json=payload, headers=headers, timeout=120)
+            if not resp.ok:
+                # 如果是 404 模型不存在，尝试拉取可用模型列表
+                if resp.status_code == 404:
+                    try:
+                        error_data = resp.json()
+                        if "NotFound" in str(error_data):
+                            key = api_key.strip()
+                            if key not in MODEL_CACHE:
+                                print("[火山引擎] 模型不存在，正在获取可用模型列表...")
+                                MODEL_CACHE[key] = fetch_available_models(key)
+                            if MODEL_CACHE[key]:
+                                print("\n" + "=" * 60)
+                                print("[火山引擎] 可用模型列表：")
+                                for i, m in enumerate(MODEL_CACHE[key], 1):
+                                    print(f"  {i}. {m}")
+                                print("=" * 60 + "\n")
+                    except Exception:
+                        pass
+                raise RuntimeError(f"图像生成失败 [{resp.status_code}]: {resp.text}")
+
+            result = resp.json()
+            
+            # 提取图片 URL
+            data = result.get("data", [])
+            if not data:
+                raise RuntimeError(f"未返回图片数据: {json.dumps(result, ensure_ascii=False)}")
+            
+            image_url = data[0].get("url") or data[0].get("b64_json")
+            if not image_url:
+                raise RuntimeError(f"未找到图片URL: {json.dumps(result, ensure_ascii=False)}")
+
+            # 下载图片
+            if image_url.startswith("http"):
+                img_resp = requests.get(image_url, timeout=60)
+                img_resp.raise_for_status()
+                img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+            else:
+                # base64
+                img_data = base64.b64decode(image_url)
+                img = Image.open(io.BytesIO(img_data)).convert("RGB")
+
+            # 转为 tensor
+            img_np = np.array(img).astype(np.float32) / 255.0
+            img_tensor = torch.from_numpy(img_np).unsqueeze(0)  # [1, H, W, C]
+
+            info = {
+                "seed": seed,
+                "task_index": idx + 1,
+                "width": img.width,
+                "height": img.height,
+            }
+            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {img.width}x{img.height}")
+
+            return img_tensor, info
+
+        # 并发执行
+        import concurrent.futures
+        all_images = []
+        all_infos = []
+        failed = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=并发数) as executor:
+            future_map = {}
+            for idx, seed in enumerate(seeds):
+                future = executor.submit(_run_single, idx, seed)
+                future_map[future] = idx
+
+            for future in concurrent.futures.as_completed(future_map):
+                idx = future_map[future]
+                try:
+                    img_tensor, info = future.result()
+                    all_images.append((idx, img_tensor))
+                    all_infos.append((idx, info))
+                except Exception as e:
+                    print(f"[火山引擎 {log_prefix}] #{idx+1} 失败: {e}")
+                    failed.append((idx, str(e)))
+
+        if not all_images:
+            raise RuntimeError(f"所有 {并发数} 次任务均失败")
+
+        # 排序并合并
+        all_images.sort(key=lambda x: x[0])
+        all_infos.sort(key=lambda x: x[0])
+        combined_images = torch.cat([img for _, img in all_images], dim=0)
+
+        # 构建信息
+        result_info = {
+            "type": "图像生成",
+            "mode": mode_desc,
+            "model": 模型,
+            "size": 图片尺寸,
+            "total_tasks": 并发数,
+            "success": len(all_images),
+            "failed": len(failed),
+            "base_seed": base_seed,
+            "seeds": seeds,
+            "images": [info for _, info in all_infos],
+        }
+        if failed:
+            result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
+
+        info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
+        print(f"[火山引擎 {log_prefix}] 完成: {len(all_images)}/{并发数} 成功, {len(failed)} 失败")
+
+        return (combined_images, info_str)
+
+
+# ─────────────────────────────────────────────
 # 注册映射
 # ─────────────────────────────────────────────
 
 NODE_CLASS_MAPPINGS = {
     "火山引擎文生视频": 火山引擎文生视频,
     "火山引擎图生视频": 火山引擎图生视频,
+    "火山引擎图像生成": 火山引擎图像生成,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "火山引擎文生视频": "🎬 火山引擎 文生视频",
     "火山引擎图生视频": "🎬 火山引擎 图生视频",
+    "火山引擎图像生成": "🖼️ 火山引擎 图像生成",
 }
