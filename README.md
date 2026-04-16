@@ -4,6 +4,8 @@
 
 基于火山引擎方舟 API 的视频/图像生成自定义节点，支持 Seedance（视频）和 Seedream（图像）系列模型。
 
+中文 | [English](README_EN.md)
+
 ---
 
 ## ✨ 功能特性
