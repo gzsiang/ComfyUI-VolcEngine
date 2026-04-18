@@ -241,24 +241,33 @@ class 火山引擎API:
         url = f"{self.BASE_URL}/tasks"
         resp = requests.post(url, json=payload, headers=self.headers, timeout=60)
         if not resp.ok:
-            # 如果是 404 模型不存在，尝试拉取可用模型列表
-            if resp.status_code == 404:
-                try:
-                    error_data = resp.json()
-                    if "NotFound" in str(error_data):
-                        key = api_key or self.api_key
-                        if key not in MODEL_CACHE:
-                            print("[火山引擎] 模型不存在，正在获取可用模型列表...")
-                            MODEL_CACHE[key] = fetch_available_models(key)
-                        if MODEL_CACHE[key]:
-                            print("\n" + "=" * 60)
-                            print("[火山引擎] 可用模型列表：")
-                            for i, m in enumerate(MODEL_CACHE[key], 1):
-                                print(f"  {i}. {m}")
-                            print("=" * 60 + "\n")
-                except Exception:
-                    pass
-            raise RuntimeError(f"创建任务失败 [{resp.status_code}]: {resp.text}")
+            # 解析错误信息，提供中文友好提示
+            error_text = resp.text
+            friendly_hint = ""
+            try:
+                error_data = resp.json()
+                error_code = ""
+                if isinstance(error_data, dict):
+                    err_obj = error_data.get("error", error_data)
+                    error_code = err_obj.get("code", "") if isinstance(err_obj, dict) else ""
+                # 内容审核类错误
+                if "SensitiveContent" in error_code or "PrivacyInformation" in error_code:
+                    friendly_hint = "\n⚠️ 输入图片触发了内容审核，可能包含真人面部或隐私信息。请更换参考图片后重试。"
+                # 404 模型不存在
+                if resp.status_code == 404 and "NotFound" in str(error_data):
+                    key = api_key or self.api_key
+                    if key not in MODEL_CACHE:
+                        print("[火山引擎] 模型不存在，正在获取可用模型列表...")
+                        MODEL_CACHE[key] = fetch_available_models(key)
+                    if MODEL_CACHE[key]:
+                        print("\n" + "=" * 60)
+                        print("[火山引擎] 可用模型列表：")
+                        for i, m in enumerate(MODEL_CACHE[key], 1):
+                            print(f"  {i}. {m}")
+                        print("=" * 60 + "\n")
+            except Exception:
+                pass
+            raise RuntimeError(f"创建任务失败 [{resp.status_code}]: {error_text}{friendly_hint}")
         data = resp.json()
         task_id = data.get("id") or data.get("task_id")
         if not task_id:
@@ -266,11 +275,26 @@ class 火山引擎API:
         return task_id
 
     def poll_task(self, task_id: str, poll_interval: int = 10, max_wait: int = 600) -> dict:
-        """轮询任务状态，直到成功或超时"""
+        """轮询任务状态，直到成功或超时；网络瞬态异常自动重试"""
+        import requests.exceptions
         url = f"{self.BASE_URL}/tasks/{task_id}"
         start = time.time()
+        net_retry_count = 0
+        max_net_retries = 5  # 网络异常最多重试 5 次
         while time.time() - start < max_wait:
-            resp = requests.get(url, headers=self.headers, timeout=30)
+            try:
+                resp = requests.get(url, headers=self.headers, timeout=30)
+                net_retry_count = 0  # 成功后重置计数
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.ReadTimeout) as e:
+                net_retry_count += 1
+                if net_retry_count > max_net_retries:
+                    raise RuntimeError(f"轮询网络异常（已重试 {max_net_retries} 次）: {e}")
+                wait = min(poll_interval * net_retry_count, 60)
+                print(f"[火山引擎] 轮询网络异常（第{net_retry_count}次），{wait}秒后重试: {e}")
+                time.sleep(wait)
+                continue
             if not resp.ok:
                 raise RuntimeError(f"查询任务失败 [{resp.status_code}]: {resp.text}")
             data = resp.json()
@@ -488,7 +512,10 @@ def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
                 failed.append((idx, str(e)))
 
     if not all_frames:
-        raise RuntimeError(f"所有 {任务数} 次任务均失败")
+        # 收集所有失败的详细信息
+        failed_msgs = [f"#Task{idx+1}: {err}" for idx, err in failed]
+        error_detail = "\n".join(failed_msgs)
+        raise RuntimeError(f"所有 {任务数} 次任务均失败\n详细错误:\n{error_detail}")
 
     # 按原始顺序排列
     all_frames.sort(key=lambda x: x[0])
