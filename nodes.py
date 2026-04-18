@@ -598,7 +598,7 @@ class 火山引擎文生视频:
                 "固定摄像头": ("BOOLEAN", {"default": False}),
                 "返回尾帧": ("BOOLEAN", {"default": False}),
                 "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": True}),
+                "水印": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
@@ -732,7 +732,7 @@ class 火山引擎图生视频:
                 "固定摄像头": ("BOOLEAN", {"default": False}),
                 "返回尾帧": ("BOOLEAN", {"default": False}),
                 "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": True}),
+                "水印": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "参考音频": ("AUDIO",),
