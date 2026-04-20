@@ -265,6 +265,15 @@ class 火山引擎API:
                         for i, m in enumerate(MODEL_CACHE[key], 1):
                             print(f"  {i}. {m}")
                         print("=" * 60 + "\n")
+                # 429 限流
+                if resp.status_code == 429:
+                    friendly_hint = "\n⚠️ API 请求频率过高（限流），请稍后重试或降低并发数。"
+                # 402 余额不足
+                if resp.status_code == 402:
+                    friendly_hint = "\n⚠️ 账户余额不足或套餐已过期，请充值后重试。"
+                # 401 认证失败
+                if resp.status_code == 401:
+                    friendly_hint = "\n⚠️ API Key 无效或已过期，请检查密钥是否正确。"
             except Exception:
                 pass
             raise RuntimeError(f"创建任务失败 [{resp.status_code}]: {error_text}{friendly_hint}")
@@ -568,7 +577,7 @@ class 火山引擎文生视频:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {
+                "api_key": ("PASSWORD", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
@@ -582,7 +591,7 @@ class 火山引擎文生视频:
                 "并发数": ("INT", {
                     "default": 1,
                     "min": 1,
-                    "max": 10,
+                    "max": 5,
                     "step": 1,
                 }),
                 "视频时长秒": ("INT", {
@@ -701,7 +710,7 @@ class 火山引擎图生视频:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {
+                "api_key": ("PASSWORD", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
@@ -716,7 +725,7 @@ class 火山引擎图生视频:
                 "并发数": ("INT", {
                     "default": 1,
                     "min": 1,
-                    "max": 10,
+                    "max": 5,
                     "step": 1,
                 }),
                 "视频时长秒": ("INT", {
@@ -857,7 +866,7 @@ class 火山引擎图像生成:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("STRING", {
+                "api_key": ("PASSWORD", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
@@ -871,10 +880,11 @@ class 火山引擎图像生成:
                 "并发数": ("INT", {
                     "default": 1,
                     "min": 1,
-                    "max": 10,
+                    "max": 5,
                     "step": 1,
                 }),
                 "图片尺寸": (["1024x1024", "2048x2048", "3072x3072", "4096x4096", "1280x720", "1920x1080"], {"default": "1024x1024"}),
+                "服务等级": (["default", "flex"], {"default": "default"}),
                 "水印": ("BOOLEAN", {"default": False}),
             },
             "optional": {
@@ -889,7 +899,7 @@ class 火山引擎图像生成:
     FUNCTION = "生成"
     CATEGORY = "火山引擎"
 
-    def 生成(self, api_key, 模型, 提示词, 并发数, 图片尺寸, 水印,
+    def 生成(self, api_key, 模型, 提示词, 并发数, 图片尺寸, 服务等级, 水印,
              参考图片=None, 随机种子=-1):
 
         if not api_key.strip():
@@ -924,6 +934,8 @@ class 火山引擎图像生成:
                 "watermark": 水印,
                 "response_format": "url",
             }
+            if 服务等级 != "default":
+                payload["service_tier"] = 服务等级
             
             if seed != -1:
                 payload["seed"] = seed
@@ -946,24 +958,22 @@ class 火山引擎图像生成:
             # 直接调用图像生成 API（同步）
             resp = requests.post(self.IMAGE_API_URL, json=payload, headers=headers, timeout=120)
             if not resp.ok:
-                # 如果是 404 模型不存在，尝试拉取可用模型列表
-                if resp.status_code == 404:
-                    try:
-                        error_data = resp.json()
-                        if "NotFound" in str(error_data):
-                            key = api_key.strip()
-                            if key not in MODEL_CACHE:
-                                print("[火山引擎] 模型不存在，正在获取可用模型列表...")
-                                MODEL_CACHE[key] = fetch_available_models(key)
-                            if MODEL_CACHE[key]:
-                                print("\n" + "=" * 60)
-                                print("[火山引擎] 可用模型列表：")
-                                for i, m in enumerate(MODEL_CACHE[key], 1):
-                                    print(f"  {i}. {m}")
-                                print("=" * 60 + "\n")
-                    except Exception:
-                        pass
-                raise RuntimeError(f"图像生成失败 [{resp.status_code}]: {resp.text}")
+                error_hint = ""
+                try:
+                    error_data = resp.json()
+                    error_code = ""
+                    if isinstance(error_data, dict):
+                        err_obj = error_data.get("error", error_data)
+                        error_code = err_obj.get("code", "") if isinstance(err_obj, dict) else ""
+                    if resp.status_code == 429:
+                        error_hint = "\n⚠️ API 请求频率过高（限流），请稍后重试或降低并发数。"
+                    if resp.status_code == 402:
+                        error_hint = "\n⚠️ 账户余额不足或套餐已过期，请充值后重试。"
+                    if resp.status_code == 401:
+                        error_hint = "\n⚠️ API Key 无效或已过期，请检查密钥是否正确。"
+                except Exception:
+                    pass
+                raise RuntimeError(f"图像生成失败 [{resp.status_code}]: {resp.text}{error_hint}")
 
             result = resp.json()
             
