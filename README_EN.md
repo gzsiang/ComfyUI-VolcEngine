@@ -89,10 +89,10 @@ Automatically determined by input image count:
 
 | Parameter | Type | Range | Default | Description |
 |-----|------|------|-------|------|
-| API Key | String | - | - | VolcEngine Ark API Key |
+| API Key | PASSWORD | - | - | VolcEngine Ark API Key (password input) |
 | Model | Dropdown | - | doubao-seedance-2-0-260128 | Video generation model |
 | Prompt | String | - | - | Video content description |
-| Concurrent Count | Int | 1-10 | 1 | Concurrent generation count for same prompt (gacha) |
+| Concurrent Count | Int | 1-5 | 1 | Concurrent generation count for same prompt (gacha) |
 | Video Duration (sec) | Int | 4-15 | 5 | Generated video duration |
 | Resolution | Dropdown | 480p/720p | 720p | Video resolution |
 | Aspect Ratio | Dropdown | Various | 16:9 (T2V) / adaptive (I2V) | Video aspect ratio |
@@ -114,12 +114,13 @@ Automatically determined by input image count:
 
 | Parameter | Type | Range | Default | Description |
 |-----|------|------|-------|------|
-| API Key | String | - | - | VolcEngine Ark API Key |
+| API Key | PASSWORD | - | - | VolcEngine Ark API Key (password input) |
 | Model | Dropdown | - | doubao-seedream-4-5-251128 | Image generation model |
 | Prompt | String | - | - | Image content description |
 | Reference Image | Image | - | - | Optional, for image-to-image |
-| Concurrent Count | Int | 1-10 | 1 | Concurrent generation count for same prompt |
+| Concurrent Count | Int | 1-5 | 1 | Concurrent generation count for same prompt |
 | Image Size | Dropdown | Various | 1024x1024 | Output image size |
+| Service Tier | Dropdown | - | default | default (standard) / flex (offline, ~50% cheaper) |
 | Watermark | Boolean | - | False | Whether to add watermark |
 | Random Seed | Int | -1~∞ | -1 | -1 for random |
 
@@ -186,7 +187,7 @@ Import method: ComfyUI interface → Load → Select json file
 3. **Resolution Limits**: Seedance 2.0 supports up to 720p, older versions up to 1080p; Seedream supports up to 4K
 4. **Audio Reference**: Must provide at least 1 image to use reference audio feature
 5. **Service Tier**: `flex` mode is offline inference, ~50% cheaper but may have longer wait times
-6. **Concurrent Count**: When concurrent count > 1, multiple videos will be generated simultaneously, be aware of API call costs
+6. **Concurrent Count**: Maximum concurrent count is 5. When > 1, multiple videos/images will be generated simultaneously, be aware of API call costs
 
 ---
 
