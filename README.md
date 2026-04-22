@@ -4,140 +4,140 @@
 
 <br />
 
-# ComfyUI 火山引擎生成节点
+# ComfyUI VolcEngine Node
 
 🎬 **ComfyUI Custom Node for VolcEngine (火山引擎) Video & Image Generation**
 
-基于火山引擎方舟 API 的视频/图像生成自定义节点，支持 Seedance（视频）和 Seedream（图像）系列模型。
+Custom nodes for video/image generation via VolcEngine Ark API, supporting Seedance (video) and Seedream (image) model series.
 
-中文 | [English](README_EN.md)
-
----
-
-## ✨ 功能特性
-
-### 视频生成
-- **文生视频**：纯文本描述生成视频
-- **图生视频**：支持单图（首帧）、双图（首尾帧）、多图（参考图）模式
-- **参考音频**：支持传入音频作为角色音色参考（Seedance 2.0）
-- **并发生成**：同一提示词多个种子并发生成（抽卡模式）
-
-### 图像生成
-- **文生图**：文本描述生成图片，支持最高 4K 分辨率
-- **图生图**：参考图片 + 提示词生成新图片
-- **多参考图**：最多支持 10 张参考图
-
-### 通用特性
-- **多模型支持**：Seedance 2.0/1.5/1.0（视频）、Seedream 5.0/4.5/4.0/3.1（图像）
-- **完整参数**：分辨率、宽高比、生成音频、固定摄像头、服务等级等
-- **模型自动提示**：模型 404 时自动拉取可用模型列表
+English | [中文](README.zh.md)
 
 ---
 
-## 📦 安装
+## ✨ Features
 
-### 方法1：直接克隆到 custom_nodes
+### Video Generation
+- **Text-to-Video**: Generate videos from text descriptions
+- **Image-to-Video**: Supports single image (first frame), dual images (start/end frames), and multi-image (reference) modes
+- **Reference Audio**: Pass audio as voice reference (Seedance 2.0)
+- **Parallel Generation**: Generate multiple seeds with the same prompt (multi-roll mode)
+
+### Image Generation
+- **Text-to-Image**: Generate images from text descriptions, up to 4K resolution
+- **Image-to-Image**: Generate new images from reference images + prompts
+- **Multi-Reference**: Supports up to 10 reference images
+
+### General
+- **Multi-Model Support**: Seedance 2.0/1.5/1.0 (video), Seedream 5.0/4.5/4.0/3.1 (image)
+- **Full Parameters**: Resolution, aspect ratio, audio generation, locked camera, service tier, etc.
+- **Auto Model List**: Automatically fetches available models when a 404 error occurs
+
+---
+
+## 📦 Installation
+
+### Method 1: Clone to custom_nodes
 
 ```bash
 cd ComfyUI/custom_nodes
 git clone https://github.com/gzsiang/ComfyUI-VolcEngine.git
 ```
 
-### 方法2：手动安装
+### Method 2: Manual Install
 
-1. 下载本仓库代码
-2. 解压到 `ComfyUI/custom_nodes/ComfyUI-VolcEngine/`
-3. 重启 ComfyUI
-
----
-
-## 🔑 获取 API Key
-
-1. 访问 [火山引擎控制台](https://console.volcengine.com/)
-2. 进入「方舟」服务
-3. 创建 API Key
-4. 开通模型权限：
-   - 视频生成：Seedance 系列
-   - 图像生成：Seedream 系列
+1. Download this repository
+2. Extract to `ComfyUI/custom_nodes/ComfyUI-VolcEngine/`
+3. Restart ComfyUI
 
 ---
 
-## 🚀 使用方法
+## 🔑 Getting an API Key
 
-### 节点说明
-
-| 节点名称 | 功能 | 输入 |
-|---------|------|------|
-| 🎬 火山引擎 文生视频 | 文本生成视频 | API Key、模型、提示词、参数 |
-| 🎬 火山引擎 图生视频 | 图片生成视频 | API Key、模型、图片、提示词、参数 |
-| 🖼️ 火山引擎 图像生成 | 文本/图片生成图片 | API Key、模型、提示词、参数 |
-
-### 图生视频模式
-
-根据输入图片数量自动判断：
-
-| 图片数量 | 模式 | 说明 |
-|---------|------|------|
-| 1张 | 首帧模式 | 以该图为视频起始帧 |
-| 2张 | 首尾帧模式 | 第一张为起始，第二张为结束 |
-| 3-9张 | 多参考图模式 | 作为风格/内容参考 |
-
-### 参考音频
-
-- 传入音频后，生成的视频会使用该音频的音色
-- **注意**：使用参考音频时必须同时传入至少1张图片
+1. Visit [VolcEngine Console](https://console.volcengine.com/)
+2. Go to the "Ark" service
+3. Create an API Key
+4. Enable model access:
+   - Video generation: Seedance series
+   - Image generation: Seedream series
 
 ---
 
-## ⚙️ 参数说明
+## 🚀 Usage
 
-### 视频生成参数
+### Nodes
 
-| 参数 | 类型 | 范围 | 默认值 | 说明 |
-|-----|------|------|-------|------|
-| API Key | PASSWORD | - | - | 火山引擎方舟 API Key（密码输入框） |
-| 模型 | 下拉 | - | doubao-seedance-2-0-260128 | 视频生成模型 |
-| 提示词 | String | - | - | 视频内容描述 |
-| 并发数 | Int | 1-5 | 1 | 同一提示词并发生成次数（抽卡） |
-| 视频时长秒 | Int | 4-15 | 5 | 生成视频时长 |
-| 分辨率 | 下拉 | 480p/720p | 720p | 视频分辨率 |
-| 宽高比 | 下拉 | 多种 | 16:9(文生)/adaptive(图生) | 视频宽高比 |
-| 水印 | Boolean | - | True | 是否添加水印 |
-| 随机种子 | Int | -1~∞ | -1 | -1为随机 |
-| 轮询间隔 | Int | 3-30 | 10 | 任务状态查询间隔(秒) |
-| 最大等待 | Int | 60-1800 | 600 | 最大等待时间(秒) |
+| Node Name | Function | Inputs |
+|-----------|----------|--------|
+| 🎬 VolcEngine Text-to-Video | Text to video | API Key, model, prompt, parameters |
+| 🎬 VolcEngine Image-to-Video | Image to video | API Key, model, image, prompt, parameters |
+| 🖼️ VolcEngine Image Generation | Text/image to image | API Key, model, prompt, parameters |
 
-### Seedance 2.0 特有参数
+### Image-to-Video Modes
 
-| 参数 | 类型 | 默认值 | 说明 |
-|-----|------|-------|------|
-| 生成音频 | Boolean | True | 是否生成视频音频 |
-| 固定摄像头 | Boolean | False | 固定摄像机视角 |
-| 返回尾帧 | Boolean | False | 同时返回最后一帧图片 |
-| 服务等级 | 下拉 | default | default(标准)/flex(离线，便宜约50%) |
+Automatically determined by input image count:
 
-### 图像生成参数
+| Image Count | Mode | Description |
+|-------------|------|-------------|
+| 1 image | First-frame mode | Uses image as video start frame |
+| 2 images | Start/end frame mode | First image = start, second = end |
+| 3-9 images | Multi-reference mode | Used as style/content reference |
 
-| 参数 | 类型 | 范围 | 默认值 | 说明 |
-|-----|------|------|-------|------|
-| API Key | PASSWORD | - | - | 火山引擎方舟 API Key（密码输入框） |
-| 模型 | 下拉 | - | doubao-seedream-4-5-251128 | 图像生成模型 |
-| 提示词 | String | - | - | 图片内容描述 |
-| 参考图片 | Image | - | - | 可选，用于图生图 |
-| 并发数 | Int | 1-5 | 1 | 同一提示词并发生成次数 |
-| 图片尺寸 | 下拉 | 多种 | 1024x1024 | 输出图片尺寸 |
-| 服务等级 | 下拉 | - | default | default(标准)/flex(离线，便宜约50%) |
-| 水印 | Boolean | - | False | 是否添加水印 |
-| 随机种子 | Int | -1~∞ | -1 | -1为随机 |
+### Reference Audio
+
+- When audio is provided, the generated video will use the audio's voice
+- **Note**: Must provide at least 1 image when using reference audio
 
 ---
 
-## 📋 支持的模型
+## ⚙️ Parameters
 
-### 视频生成 - Seedance 系列
+### Video Generation Parameters
 
-#### Seedance 2.0（推荐）
-- `doubao-seedance-2-0-260128` - 最新版本，支持多模态参考
+| Parameter | Type | Range | Default | Description |
+|-----------|------|-------|---------|-------------|
+| API Key | PASSWORD | - | - | VolcEngine Ark API Key (password input) |
+| Model | Dropdown | - | doubao-seedance-2-0-260128 | Video generation model |
+| Prompt | String | - | - | Video content description |
+| Concurrency | Int | 1-5 | 1 | Number of parallel generations per prompt |
+| Video Duration (s) | Int | 4-15 | 5 | Video length |
+| Resolution | Dropdown | 480p/720p | 720p | Video resolution |
+| Aspect Ratio | Dropdown | Various | 16:9 (text-to-video) / adaptive (image-to-video) | Video aspect ratio |
+| Watermark | Boolean | - | True | Whether to add watermark |
+| Random Seed | Int | -1~∞ | -1 | -1 for random |
+| Poll Interval | Int | 3-30 | 10 | Task status check interval (seconds) |
+| Max Wait | Int | 60-1800 | 600 | Maximum wait time (seconds) |
+
+### Seedance 2.0 Specific Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| Generate Audio | Boolean | True | Whether to generate video audio |
+| Locked Camera | Boolean | False | Lock camera perspective |
+| Return Last Frame | Boolean | False | Also return the last frame image |
+| Service Tier | Dropdown | default | default (standard) / flex (offline, ~50% cheaper) |
+
+### Image Generation Parameters
+
+| Parameter | Type | Range | Default | Description |
+|-----------|------|-------|---------|-------------|
+| API Key | PASSWORD | - | - | VolcEngine Ark API Key (password input) |
+| Model | Dropdown | - | doubao-seedream-4-5-251128 | Image generation model |
+| Prompt | String | - | - | Image content description |
+| Reference Image | Image | - | - | Optional, for image-to-image |
+| Concurrency | Int | 1-5 | 1 | Number of parallel generations per prompt |
+| Image Size | Dropdown | Various | 1024x1024 | Output image size |
+| Service Tier | Dropdown | - | default | default (standard) / flex (offline, ~50% cheaper) |
+| Watermark | Boolean | - | False | Whether to add watermark |
+| Random Seed | Int | -1~∞ | -1 | -1 for random |
+
+---
+
+## 📋 Supported Models
+
+### Video Generation - Seedance Series
+
+#### Seedance 2.0 (Recommended)
+- `doubao-seedance-2-0-260128` - Latest version, supports multi-modal references
 
 #### Seedance 1.5
 - `doubao-seedance-1-5-pro-251215`
@@ -148,7 +148,7 @@ git clone https://github.com/gzsiang/ComfyUI-VolcEngine.git
 - `doubao-seedance-1-0-pro-fast`
 - `doubao-seedance-1-0-lite`
 
-### 图像生成 - Seedream 系列
+### Image Generation - Seedream Series
 
 - `doubao-seedream-5-0`
 - `doubao-seedream-4-5-251128`
@@ -157,53 +157,53 @@ git clone https://github.com/gzsiang/ComfyUI-VolcEngine.git
 
 ---
 
-## 📁 工作流示例
+## 📁 Workflow Examples
 
-仓库包含示例工作流文件：
+The repository includes example workflow files:
 
-- `workflows/火山API测试.json` - 基础测试工作流（文生视频 + 图生视频）
+- `workflows/火山API测试.json` - Basic test workflow (text-to-video + image-to-video)
 
-导入方法：ComfyUI 界面 → Load → 选择 json 文件
-
----
-
-## 🔄 输出格式
-
-### 视频节点
-
-| 端口 | 类型 | 说明 |
-|-----|------|------|
-| 视频帧 | IMAGE | 视频帧序列，可连接 VHS 等节点预览/保存 |
-| 音频 | AUDIO | 视频音频，可连接音频输出节点 |
-| 视频信息 | STRING | JSON格式的视频元数据（fps、帧数、时长等） |
-
-### 图像节点
-
-| 端口 | 类型 | 说明 |
-|-----|------|------|
-| 图片 | IMAGE | 生成的图片序列 |
-| 生成信息 | STRING | JSON格式的元数据（尺寸、种子等） |
+Import: ComfyUI interface → Load → select the json file
 
 ---
 
-## ⚠️ 注意事项
+## 🔄 Output Format
 
-1. **API Key 安全**：不要在分享工作流时泄露你的 API Key
-2. **图片限制**：图生视频最多支持 9 张图片，图像生成最多支持 10 张参考图
-3. **分辨率限制**：Seedance 2.0 最高支持 720p，旧版最高支持 1080p；Seedream 最高支持 4K
-4. **音频参考**：必须同时提供图片才能使用参考音频功能
-5. **服务等级**：`flex` 模式为离线推理，价格约便宜 50%，但等待时间可能更长
-6. **并发数**：并发数上限为 5，> 1 时会同时生成多个视频/图片，注意 API 调用费用
+### Video Nodes
+
+| Port | Type | Description |
+|------|------|-------------|
+| Video Frames | IMAGE | Video frame sequence, can connect to VHS or other nodes for preview/save |
+| Audio | AUDIO | Video audio, can connect to audio output nodes |
+| Video Info | STRING | JSON metadata (fps, frame count, duration, etc.) |
+
+### Image Nodes
+
+| Port | Type | Description |
+|------|------|-------------|
+| Image | IMAGE | Generated image sequence |
+| Generation Info | STRING | JSON metadata (size, seed, etc.) |
 
 ---
 
-## 📄 许可证
+## ⚠️ Notes
+
+1. **API Key Security**: Do not share your API Key when sharing workflows
+2. **Image Limits**: Image-to-video supports up to 9 images, image generation supports up to 10 reference images
+3. **Resolution Limits**: Seedance 2.0 max 720p, older versions max 1080p; Seedream max 4K
+4. **Audio Reference**: Must provide an image to use reference audio
+5. **Service Tier**: `flex` mode uses offline inference, ~50% cheaper but may have longer wait times
+6. **Concurrency**: Max 5 concurrent requests. With >1, multiple videos/images are generated simultaneously — watch API costs
+
+---
+
+## 📄 License
 
 MIT License
 
 ---
 
-## 🔗 相关链接
+## 🔗 Related Links
 
-- [火山引擎文档](https://www.volcengine.com/docs/82379/1520757)
-- [ComfyUI 官方仓库](https://github.com/comfyanonymous/ComfyUI)
+- [VolcEngine Documentation](https://www.volcengine.com/docs/82379/1520757)
+- [ComfyUI Official Repo](https://github.com/comfyanonymous/ComfyUI)
