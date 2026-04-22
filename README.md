@@ -1,3 +1,9 @@
+<h4 align="center">
+  English | <a href="./README.zh.md">中文</a>
+</h4>
+
+<br />
+
 # ComfyUI 火山引擎生成节点
 
 🎬 **ComfyUI Custom Node for VolcEngine (火山引擎) Video & Image Generation**
