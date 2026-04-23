@@ -283,7 +283,7 @@ class 火山引擎API:
             raise RuntimeError(f"未获取到 task_id，响应: {json.dumps(data, ensure_ascii=False)}")
         return task_id
 
-    def poll_task(self, task_id: str, poll_interval: int = 10, max_wait: int = 600) -> dict:
+    def poll_task(self, task_id: str, poll_interval: int = 10, max_wait: int = 600, model_name: str = "") -> dict:
         """轮询任务状态，直到成功或超时；网络瞬态异常自动重试"""
         import requests.exceptions
         url = f"{self.BASE_URL}/tasks/{task_id}"
@@ -291,7 +291,8 @@ class 火山引擎API:
         net_retry_count = 0
         max_net_retries = 5  # 网络异常最多重试 5 次
         poll_count = 0
-        print(f"[火山引擎] 开始轮询任务 {task_id}...", flush=True)
+        prefix = model_name.strip() if model_name.strip() else "火山引擎"
+        print(f"[{prefix}] 开始轮询任务 {task_id}...", flush=True)
         while time.time() - start < max_wait:
             try:
                 resp = requests.get(url, headers=self.headers, timeout=30)
@@ -304,7 +305,7 @@ class 火山引擎API:
                     raise RuntimeError(f"轮询网络异常（已重试 {max_net_retries} 次）: {e}")
                 wait = min(poll_interval * net_retry_count, 60)
                 elapsed = int(time.time() - start)
-                print(f"\r[火山引擎] ⏳ 网络异常（第{net_retry_count}次）| 已等待 {elapsed//60}:{elapsed%60:02d} | 继续重试...", end="", flush=True)
+                print(f"\r[{prefix}] ⏳ 网络异常（第{net_retry_count}次）| 已等待 {elapsed//60}:{elapsed%60:02d} | 继续重试...", end="", flush=True)
                 time.sleep(wait)
                 continue
             if not resp.ok:
@@ -313,14 +314,14 @@ class 火山引擎API:
             status = data.get("status", "")
             if status == "succeeded":
                 elapsed = int(time.time() - start)
-                print(f"\r[火山引擎] ✅ 任务完成 | 轮询 {poll_count} 次 | 总用时 {elapsed//60}:{elapsed%60:02d}    ")
+                print(f"\r[{prefix}] ✅ 完成 | 轮询 {poll_count} 次 | 耗时 {elapsed//60}:{elapsed%60:02d}    ")
                 return data
             if status == "failed":
                 error = data.get("error", {})
                 raise RuntimeError(f"任务失败: {error.get('message', json.dumps(data, ensure_ascii=False))}")
             poll_count += 1
             elapsed = int(time.time() - start)
-            print(f"\r[火山引擎] ⏳ 运行中 | 轮询 #{poll_count} | 已等待 {elapsed//60}:{elapsed%60:02d}", end="", flush=True)
+            print(f"\r[{prefix}] ⏳ 运行中 | 轮询 #{poll_count} | 已等待 {elapsed//60}:{elapsed%60:02d}", end="", flush=True)
             time.sleep(poll_interval)
         raise TimeoutError(f"任务超时（{max_wait}秒），task_id={task_id}")
 
@@ -663,7 +664,7 @@ class 火山引擎文生视频:
             task_id = api.create_task(payload, api_key=api_key.strip())
             print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
 
-            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待, model_name=模型)
             video_url = api.extract_video_url(result)
 
             print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
@@ -677,7 +678,7 @@ class 火山引擎文生视频:
 
         # 任务列表：(seed,)
         tasks = [(s,) for s in seeds]
-        
+
         all_frames, all_audios, all_infos, failed = _concurrent_run(
             并发数, 并发数, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
         )
@@ -811,7 +812,7 @@ class 火山引擎图生视频:
             task_id = api.create_task(payload, api_key=api_key.strip())
             print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
 
-            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待)
+            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待, model_name=模型)
             video_url = api.extract_video_url(result)
 
             print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
