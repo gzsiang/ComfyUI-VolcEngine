@@ -577,7 +577,7 @@ class 火山引擎文生视频:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("PASSWORD", {
+                "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
@@ -710,7 +710,7 @@ class 火山引擎图生视频:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("PASSWORD", {
+                "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
@@ -866,7 +866,7 @@ class 火山引擎图像生成:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "api_key": ("PASSWORD", {
+                "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
                     "placeholder": "火山引擎方舟 API Key",
