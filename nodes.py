@@ -18,6 +18,7 @@ import os
 import io
 import time
 import json
+import re
 import base64
 import requests
 import numpy as np
@@ -133,10 +134,14 @@ def audio_to_base64(audio_dict: dict) -> str:
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-def load_video_from_url(url: str):
+def load_video_from_url(url: str, expected_audio: bool = False):
     """
     从 URL 下载视频并解析为帧(IMAGE tensor)和音频(AUDIO tensor)
     返回: (frames_tensor, audio_dict, video_info_dict)
+    
+    Args:
+        url: 视频下载 URL
+        expected_audio: 用户是否期望有音频（用于决定错误提示策略）
     """
     import tempfile
     import subprocess
@@ -199,9 +204,32 @@ def load_video_from_url(url: str):
                 }
 
             os.unlink(audio_path)
+        except subprocess.CalledProcessError as ffmpeg_err:
+            stderr_str = ffmpeg_err.stderr.decode('utf-8', errors='replace') if ffmpeg_err.stderr else ""
+            # 无声视频是正常的
+            if 'no stream' not in stderr_str and 'Stream' not in stderr_str:
+                if expected_audio:
+                    # 用户期望有音频，需要告知结果
+                    if ffmpeg_err.returncode > 255:
+                        # Windows 进程异常终止，可能是无音频轨
+                        print("[火山引擎] 视频无音频，已跳过")
+                    else:
+                        # 真正的 ffmpeg 错误
+                        print(f"[火山引擎] 音频提取异常: {stderr_str[:200]}")
+                # 否则静默处理
+            audio_dict = {
+                "waveform": torch.zeros((1, 2, 1)),
+                "sample_rate": 44100
+            }
+
         except Exception as e:
-            print(f"[火山引擎] 音频提取失败或视频无音频: {e}")
-            # ComfyUI AUDIO format: [batch, channels, samples]
+            err_str = str(e)
+            # 过滤掉吓人的退出码（如 4294967274）
+            err_str = re.sub(r'exit status \d+', '', err_str).strip()
+            if err_str:
+                if expected_audio:
+                    print(f"[火山引擎] 音频提取跳过: {err_str[:100]}")
+                # 否则静默处理
             audio_dict = {
                 "waveform": torch.zeros((1, 2, 1)),
                 "sample_rate": 44100
@@ -668,7 +696,7 @@ class 火山引擎文生视频:
             video_url = api.extract_video_url(result)
 
             print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
-            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=生成音频)
 
             video_info["seed"] = seed
             video_info["task_index"] = idx + 1
@@ -816,7 +844,7 @@ class 火山引擎图生视频:
             video_url = api.extract_video_url(result)
 
             print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
-            frames_tensor, audio_dict, video_info = load_video_from_url(video_url)
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=生成音频)
 
             video_info["seed"] = seed
             video_info["task_index"] = idx + 1
