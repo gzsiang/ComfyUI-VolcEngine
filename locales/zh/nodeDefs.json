@@ -1,0 +1,222 @@
+{
+  "volcenginetexttovideo": {
+    "display_name": "🎬 火山引擎 文生视频",
+    "description": "使用火山引擎 Seedance 模型通过文字提示词生成视频",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "火山引擎方舟平台 API Key"
+      },
+      "model": {
+        "name": "模型",
+        "tooltip": "用于视频生成的 Seedance 模型版本"
+      },
+      "prompt": {
+        "name": "提示词",
+        "tooltip": "描述你想生成的视频内容"
+      },
+      "concurrency": {
+        "name": "并发数",
+        "tooltip": "并行任务数量（抽卡模式：同一提示词，不同种子）"
+      },
+      "video_duration": {
+        "name": "时长（秒）",
+        "tooltip": "视频时长（4-15秒）"
+      },
+      "resolution": {
+        "name": "分辨率",
+        "tooltip": "输出视频分辨率"
+      },
+      "aspect_ratio": {
+        "name": "宽高比",
+        "tooltip": "视频宽高比。使用 'adaptive' 自动选择"
+      },
+      "generate_audio": {
+        "name": "生成音频",
+        "tooltip": "是否为视频生成配套音频"
+      },
+      "camera_fixed": {
+        "name": "固定摄像头",
+        "tooltip": "保持摄像头位置固定不变"
+      },
+      "return_last_frame": {
+        "name": "返回尾帧",
+        "tooltip": "在输出中包含最后一帧"
+      },
+      "service_tier": {
+        "name": "服务等级",
+        "tooltip": "服务等级：'default' 标准，'flex' 离线/低成本"
+      },
+      "watermark": {
+        "name": "水印",
+        "tooltip": "是否为生成的视频添加水印"
+      },
+      "seed": {
+        "name": "随机种子",
+        "tooltip": "随机种子用于可复现性（-1 为随机）"
+      },
+      "poll_interval": {
+        "name": "轮询间隔",
+        "tooltip": "任务状态检查间隔（秒）"
+      },
+      "max_wait": {
+        "name": "最大等待（秒）",
+        "tooltip": "等待任务完成的最大秒数"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频帧",
+        "tooltip": "生成的视频帧，IMAGE tensor 格式"
+      },
+      "1": {
+        "name": "音频",
+        "tooltip": "生成的音频轨道，AUDIO tensor 格式"
+      },
+      "2": {
+        "name": "视频信息",
+        "tooltip": "任务结果信息，JSON 格式"
+      }
+    }
+  },
+  "volcengineimagetovideo": {
+    "display_name": "🎬 火山引擎 图生视频",
+    "description": "使用火山引擎 Seedance 模型通过图片生成视频。支持多图和参考音频。",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "火山引擎方舟平台 API Key"
+      },
+      "model": {
+        "name": "模型",
+        "tooltip": "用于视频生成的 Seedance 模型版本"
+      },
+      "image": {
+        "name": "图片",
+        "tooltip": "输入图片：1张=首帧，2张=首尾帧，3张+=参考图"
+      },
+      "prompt": {
+        "name": "提示词",
+        "tooltip": "描述运动方式或场景转换（可留空）"
+      },
+      "concurrency": {
+        "name": "并发数",
+        "tooltip": "并行任务数量（抽卡模式：同一配置，不同种子）"
+      },
+      "video_duration": {
+        "name": "时长（秒）",
+        "tooltip": "视频时长（4-15秒）"
+      },
+      "resolution": {
+        "name": "分辨率",
+        "tooltip": "输出视频分辨率"
+      },
+      "aspect_ratio": {
+        "name": "宽高比",
+        "tooltip": "视频宽高比。使用 'adaptive' 自动选择"
+      },
+      "generate_audio": {
+        "name": "生成音频",
+        "tooltip": "是否为视频生成配套音频"
+      },
+      "camera_fixed": {
+        "name": "固定摄像头",
+        "tooltip": "保持摄像头位置固定不变"
+      },
+      "return_last_frame": {
+        "name": "返回尾帧",
+        "tooltip": "在输出中包含最后一帧"
+      },
+      "service_tier": {
+        "name": "服务等级",
+        "tooltip": "服务等级：'default' 标准，'flex' 离线/低成本"
+      },
+      "watermark": {
+        "name": "水印",
+        "tooltip": "是否为生成的视频添加水印"
+      },
+      "reference_audio": {
+        "name": "参考音频",
+        "tooltip": "可选的参考音频用于风格匹配"
+      },
+      "seed": {
+        "name": "随机种子",
+        "tooltip": "随机种子用于可复现性（-1 为随机）"
+      },
+      "poll_interval": {
+        "name": "轮询间隔",
+        "tooltip": "任务状态检查间隔（秒）"
+      },
+      "max_wait": {
+        "name": "最大等待（秒）",
+        "tooltip": "等待任务完成的最大秒数"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "视频帧",
+        "tooltip": "生成的视频帧，IMAGE tensor 格式"
+      },
+      "1": {
+        "name": "音频",
+        "tooltip": "生成的音频轨道，AUDIO tensor 格式"
+      },
+      "2": {
+        "name": "视频信息",
+        "tooltip": "任务结果信息，JSON 格式"
+      }
+    }
+  },
+  "volcengineimagegeneration": {
+    "display_name": "🖼️ 火山引擎 图像生成",
+    "description": "使用火山引擎 Seedream 模型生成图片。支持文生图和图生图。",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "火山引擎方舟平台 API Key"
+      },
+      "model": {
+        "name": "模型",
+        "tooltip": "用于图像生成的 Seedream 模型版本"
+      },
+      "prompt": {
+        "name": "提示词",
+        "tooltip": "描述你想生成的图片内容"
+      },
+      "concurrency": {
+        "name": "并发数",
+        "tooltip": "并行任务数量（抽卡模式：同一配置，不同种子）"
+      },
+      "image_size": {
+        "name": "图片尺寸",
+        "tooltip": "输出图片尺寸"
+      },
+      "service_tier": {
+        "name": "服务等级",
+        "tooltip": "服务等级：'default' 标准，'flex' 离线/低成本"
+      },
+      "watermark": {
+        "name": "水印",
+        "tooltip": "是否为生成的图片添加水印"
+      },
+      "reference_image": {
+        "name": "参考图片",
+        "tooltip": "可选的参考图片用于图生图"
+      },
+      "seed": {
+        "name": "随机种子",
+        "tooltip": "随机种子用于可复现性（-1 为随机）"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "图片",
+        "tooltip": "生成的图片，IMAGE tensor 格式"
+      },
+      "1": {
+        "name": "生成信息",
+        "tooltip": "任务结果信息，JSON 格式"
+      }
+    }
+  }
+}

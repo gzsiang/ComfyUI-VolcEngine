@@ -1,0 +1,222 @@
+{
+  "volcenginetexttovideo": {
+    "display_name": "🎬 VolcEngine Text to Video",
+    "description": "Generate video from text prompt using VolcEngine Seedance models",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "VolcEngine Ark platform API Key"
+      },
+      "model": {
+        "name": "Model",
+        "tooltip": "Seedance model version to use for video generation"
+      },
+      "prompt": {
+        "name": "Prompt",
+        "tooltip": "Describe the video content you want to generate"
+      },
+      "concurrency": {
+        "name": "Concurrency",
+        "tooltip": "Number of parallel tasks (roll mode: same prompt, different seeds)"
+      },
+      "video_duration": {
+        "name": "Duration (s)",
+        "tooltip": "Video duration in seconds (4-15)"
+      },
+      "resolution": {
+        "name": "Resolution",
+        "tooltip": "Output video resolution"
+      },
+      "aspect_ratio": {
+        "name": "Aspect Ratio",
+        "tooltip": "Video aspect ratio. Use 'adaptive' for automatic selection"
+      },
+      "generate_audio": {
+        "name": "Generate Audio",
+        "tooltip": "Whether to generate accompanying audio for the video"
+      },
+      "camera_fixed": {
+        "name": "Fixed Camera",
+        "tooltip": "Keep camera position fixed without movement"
+      },
+      "return_last_frame": {
+        "name": "Return Last Frame",
+        "tooltip": "Include the last frame in the output"
+      },
+      "service_tier": {
+        "name": "Service Tier",
+        "tooltip": "Service level: 'default' for standard, 'flex' for offline/low-cost"
+      },
+      "watermark": {
+        "name": "Watermark",
+        "tooltip": "Whether to add watermark to the generated video"
+      },
+      "seed": {
+        "name": "Seed",
+        "tooltip": "Random seed for reproducibility (-1 for random)"
+      },
+      "poll_interval": {
+        "name": "Poll Interval",
+        "tooltip": "Seconds between task status checks"
+      },
+      "max_wait": {
+        "name": "Max Wait (s)",
+        "tooltip": "Maximum seconds to wait for task completion"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Video Frames",
+        "tooltip": "Generated video frames as IMAGE tensor"
+      },
+      "1": {
+        "name": "Audio",
+        "tooltip": "Generated audio track as AUDIO tensor"
+      },
+      "2": {
+        "name": "Video Info",
+        "tooltip": "Task result information in JSON format"
+      }
+    }
+  },
+  "volcengineimagetovideo": {
+    "display_name": "🎬 VolcEngine Image to Video",
+    "description": "Generate video from image(s) using VolcEngine Seedance models. Supports multi-image and reference audio.",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "VolcEngine Ark platform API Key"
+      },
+      "model": {
+        "name": "Model",
+        "tooltip": "Seedance model version to use for video generation"
+      },
+      "image": {
+        "name": "Image",
+        "tooltip": "Input image(s): 1=first frame, 2=first+last frame, 3+=reference images"
+      },
+      "prompt": {
+        "name": "Prompt",
+        "tooltip": "Describe the motion or scene transition (can be left empty)"
+      },
+      "concurrency": {
+        "name": "Concurrency",
+        "tooltip": "Number of parallel tasks (roll mode: same config, different seeds)"
+      },
+      "video_duration": {
+        "name": "Duration (s)",
+        "tooltip": "Video duration in seconds (4-15)"
+      },
+      "resolution": {
+        "name": "Resolution",
+        "tooltip": "Output video resolution"
+      },
+      "aspect_ratio": {
+        "name": "Aspect Ratio",
+        "tooltip": "Video aspect ratio. Use 'adaptive' for automatic selection"
+      },
+      "generate_audio": {
+        "name": "Generate Audio",
+        "tooltip": "Whether to generate accompanying audio for the video"
+      },
+      "camera_fixed": {
+        "name": "Fixed Camera",
+        "tooltip": "Keep camera position fixed without movement"
+      },
+      "return_last_frame": {
+        "name": "Return Last Frame",
+        "tooltip": "Include the last frame in the output"
+      },
+      "service_tier": {
+        "name": "Service Tier",
+        "tooltip": "Service level: 'default' for standard, 'flex' for offline/low-cost"
+      },
+      "watermark": {
+        "name": "Watermark",
+        "tooltip": "Whether to add watermark to the generated video"
+      },
+      "reference_audio": {
+        "name": "Reference Audio",
+        "tooltip": "Optional reference audio for style matching"
+      },
+      "seed": {
+        "name": "Seed",
+        "tooltip": "Random seed for reproducibility (-1 for random)"
+      },
+      "poll_interval": {
+        "name": "Poll Interval",
+        "tooltip": "Seconds between task status checks"
+      },
+      "max_wait": {
+        "name": "Max Wait (s)",
+        "tooltip": "Maximum seconds to wait for task completion"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Video Frames",
+        "tooltip": "Generated video frames as IMAGE tensor"
+      },
+      "1": {
+        "name": "Audio",
+        "tooltip": "Generated audio track as AUDIO tensor"
+      },
+      "2": {
+        "name": "Video Info",
+        "tooltip": "Task result information in JSON format"
+      }
+    }
+  },
+  "volcengineimagegeneration": {
+    "display_name": "🖼️ VolcEngine Image Generation",
+    "description": "Generate images using VolcEngine Seedream models. Supports text-to-image and image-to-image.",
+    "inputs": {
+      "api_key": {
+        "name": "API Key",
+        "tooltip": "VolcEngine Ark platform API Key"
+      },
+      "model": {
+        "name": "Model",
+        "tooltip": "Seedream model version to use for image generation"
+      },
+      "prompt": {
+        "name": "Prompt",
+        "tooltip": "Describe the image content you want to generate"
+      },
+      "concurrency": {
+        "name": "Concurrency",
+        "tooltip": "Number of parallel tasks (roll mode: same config, different seeds)"
+      },
+      "image_size": {
+        "name": "Image Size",
+        "tooltip": "Output image dimensions"
+      },
+      "service_tier": {
+        "name": "Service Tier",
+        "tooltip": "Service level: 'default' for standard, 'flex' for offline/low-cost"
+      },
+      "watermark": {
+        "name": "Watermark",
+        "tooltip": "Whether to add watermark to the generated image"
+      },
+      "reference_image": {
+        "name": "Reference Image",
+        "tooltip": "Optional reference image for image-to-image generation"
+      },
+      "seed": {
+        "name": "Seed",
+        "tooltip": "Random seed for reproducibility (-1 for random)"
+      }
+    },
+    "outputs": {
+      "0": {
+        "name": "Image",
+        "tooltip": "Generated image as IMAGE tensor"
+      },
+      "1": {
+        "name": "Generation Info",
+        "tooltip": "Task result information in JSON format"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "nodeCategories": {
+    "volcengine": "VolcEngine"
+  },
+  "dataTypes": {
+    "video_frames": "Video Frames",
+    "audio": "Audio",
+    "video_info": "Video Info",
+    "image": "Image",
+    "generation_info": "Generation Info"
+  }
+}

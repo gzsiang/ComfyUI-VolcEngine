@@ -1,0 +1,12 @@
+{
+  "nodeCategories": {
+    "volcengine": "火山引擎"
+  },
+  "dataTypes": {
+    "video_frames": "视频帧",
+    "audio": "音频",
+    "video_info": "视频信息",
+    "image": "图片",
+    "generation_info": "生成信息"
+  }
+}

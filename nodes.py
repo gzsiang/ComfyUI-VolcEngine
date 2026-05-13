@@ -1,17 +1,17 @@
 """
-ComfyUI 火山引擎 视频生成节点
+ComfyUI VolcEngine Video/Image Generation Node
 
-支持 Seedance 系列，文生视频 + 图生视频（多图 + 参考音频）
+Supports Seedance series: text-to-video + image-to-video (multi-image + reference audio)
 
-API 参考：https://www.volcengine.com/docs/82379/1520757
-接口：POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
+API Reference: https://www.volcengine.com/docs/82379/1520757
+Endpoint: POST https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks
 
-Seedance 2.0 多模态参考：
-  - 图片 (1~9张): role=first_frame / last_frame / reference_image
-  - 音频 (1~3段): role=reference_audio（必须至少包含1个参考图片）
-  - 文本提示词
+Seedance 2.0 Multi-modal Reference:
+  - Images (1~9): role=first_frame / last_frame / reference_image
+  - Audio (1~3 clips): role=reference_audio (must have at least 1 reference image)
+  - Text prompt
 
-输出：视频帧(IMAGE) + 音频(AUDIO) + 视频信息(STRING)
+Output: Video frames (IMAGE) + Audio (AUDIO) + Video info (STRING)
 """
 
 import os
@@ -28,40 +28,40 @@ import torch
 
 
 # ─────────────────────────────────────────────
-# 公共资源：预置模型列表（兜底）
+# Shared Resources: Preset Model Lists (Fallback)
 # ─────────────────────────────────────────────
 
-# 视频生成模型
+# Video generation models
 FALLBACK_MODELS = [
-    # Seedance 2.0 系列
+    # Seedance 2.0 series
     "doubao-seedance-2-0-260128",
-    # Seedance 1.5 系列
+    # Seedance 1.5 series
     "doubao-seedance-1-5-pro-251215",
-    # Seedance 1.0 系列
+    # Seedance 1.0 series
     "doubao-seedance-1-0-pro-250528",
     "doubao-seedance-1-0-pro",
     "doubao-seedance-1-0-pro-fast",
     "doubao-seedance-1-0-lite",
 ]
 
-# 图像生成模型
+# Image generation models
 FALLBACK_IMAGE_MODELS = [
-    # Seedream 5.0 系列
+    # Seedream 5.0 series
     "doubao-seedream-5-0",
-    # Seedream 4.5 系列
+    # Seedream 4.5 series
     "doubao-seedream-4-5-251128",
-    # Seedream 4.0 系列
+    # Seedream 4.0 series
     "doubao-seedream-4-0-250828",
-    # Seedream 3.x 系列
+    # Seedream 3.x series
     "doubao-seedream-3-1-250312",
 ]
 
-# 全局缓存：api_key → [model_id列表]
+# Global cache: api_key → [model_id list]
 MODEL_CACHE = {}
 
 
 def fetch_available_models(api_key: str) -> list[str]:
-    """从火山引擎 API 拉取可用模型列表"""
+    """Fetch available model list from VolcEngine API"""
     url = "https://ark.cn-beijing.volces.com/api/v3/models"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -83,11 +83,11 @@ def fetch_available_models(api_key: str) -> list[str]:
 
 
 # ─────────────────────────────────────────────
-# 工具函数
+# Utility Functions
 # ─────────────────────────────────────────────
 
 def tensor_to_base64(image_tensor) -> str:
-    """ComfyUI IMAGE tensor (1,H,W,C) → base64 JPEG 字符串"""
+    """ComfyUI IMAGE tensor (1,H,W,C) → base64 JPEG string"""
     img_np = image_tensor[0].cpu().numpy()
     img_np = (img_np * 255).clip(0, 255).astype(np.uint8)
     img = Image.fromarray(img_np)
@@ -97,7 +97,7 @@ def tensor_to_base64(image_tensor) -> str:
 
 
 def tensors_to_base64_list(image_tensor) -> list[str]:
-    """ComfyUI IMAGE tensor (B,H,W,C) → base64 JPEG 列表（每张图一个）"""
+    """ComfyUI IMAGE tensor (B,H,W,C) → base64 JPEG list (one per image)"""
     results = []
     for i in range(image_tensor.shape[0]):
         img_np = image_tensor[i].cpu().numpy()
@@ -110,14 +110,14 @@ def tensors_to_base64_list(image_tensor) -> list[str]:
 
 
 def audio_to_base64(audio_dict: dict) -> str:
-    """ComfyUI AUDIO dict → base64 WAV 字符串"""
+    """ComfyUI AUDIO dict → base64 WAV string"""
     import wave
 
     waveform = audio_dict.get("waveform")
     sample_rate = audio_dict.get("sample_rate", 44100)
 
     if waveform is None:
-        raise ValueError("音频数据为空")
+        raise ValueError("Audio data is empty")
 
     audio_np = waveform.squeeze(0).cpu().numpy()  # [samples, channels]
     audio_np = (audio_np * 32767).clip(-32768, 32767).astype(np.int16)
@@ -136,12 +136,12 @@ def audio_to_base64(audio_dict: dict) -> str:
 
 def load_video_from_url(url: str, expected_audio: bool = False):
     """
-    从 URL 下载视频并解析为帧(IMAGE tensor)和音频(AUDIO tensor)
-    返回: (frames_tensor, audio_dict, video_info_dict)
-    
+    Download video from URL and parse into frames (IMAGE tensor) and audio (AUDIO tensor)
+    Returns: (frames_tensor, audio_dict, video_info_dict)
+
     Args:
-        url: 视频下载 URL
-        expected_audio: 用户是否期望有音频（用于决定错误提示策略）
+        url: Video download URL
+        expected_audio: Whether user expects audio (for error strategy)
     """
     import tempfile
     import subprocess
@@ -167,11 +167,11 @@ def load_video_from_url(url: str, expected_audio: bool = False):
         reader.close()
 
         if len(frames) == 0:
-            raise ValueError("无法读取视频帧")
+            raise ValueError("Unable to read video frames")
 
         frames_tensor = torch.stack(frames)  # [T, H, W, 3]
 
-        # 提取音频
+        # Extract audio
         audio_dict = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as audio_tmp:
@@ -206,17 +206,13 @@ def load_video_from_url(url: str, expected_audio: bool = False):
             os.unlink(audio_path)
         except subprocess.CalledProcessError as ffmpeg_err:
             stderr_str = ffmpeg_err.stderr.decode('utf-8', errors='replace') if ffmpeg_err.stderr else ""
-            # 无声视频是正常的
+            # Silent video is normal
             if 'no stream' not in stderr_str and 'Stream' not in stderr_str:
                 if expected_audio:
-                    # 用户期望有音频，需要告知结果
                     if ffmpeg_err.returncode > 255:
-                        # Windows 进程异常终止，可能是无音频轨
-                        print("[火山引擎] 视频无音频，已跳过")
+                        print("[VolcEngine] Video has no audio, skipped")
                     else:
-                        # 真正的 ffmpeg 错误
-                        print(f"[火山引擎] 音频提取异常: {stderr_str[:200]}")
-                # 否则静默处理
+                        print(f"[VolcEngine] Audio extraction error: {stderr_str[:200]}")
             audio_dict = {
                 "waveform": torch.zeros((1, 2, 1)),
                 "sample_rate": 44100
@@ -224,12 +220,10 @@ def load_video_from_url(url: str, expected_audio: bool = False):
 
         except Exception as e:
             err_str = str(e)
-            # 过滤掉吓人的退出码（如 4294967274）
             err_str = re.sub(r'exit status \d+', '', err_str).strip()
             if err_str:
                 if expected_audio:
-                    print(f"[火山引擎] 音频提取跳过: {err_str[:100]}")
-                # 否则静默处理
+                    print(f"[VolcEngine] Audio extraction skipped: {err_str[:100]}")
             audio_dict = {
                 "waveform": torch.zeros((1, 2, 1)),
                 "sample_rate": 44100
@@ -251,10 +245,10 @@ def load_video_from_url(url: str, expected_audio: bool = False):
 
 
 # ─────────────────────────────────────────────
-# 火山引擎 API 客户端
+# VolcEngine API Client
 # ─────────────────────────────────────────────
 
-class 火山引擎API:
+class VolcEngineAPI:
     BASE_URL = "https://ark.cn-beijing.volces.com/api/v3/contents/generations"
 
     def __init__(self, api_key: str):
@@ -265,11 +259,10 @@ class 火山引擎API:
         }
 
     def create_task(self, payload: dict, api_key: str = None) -> str:
-        """创建视频生成任务，返回 task_id"""
+        """Create video generation task, return task_id"""
         url = f"{self.BASE_URL}/tasks"
         resp = requests.post(url, json=payload, headers=self.headers, timeout=60)
         if not resp.ok:
-            # 解析错误信息，提供中文友好提示
             error_text = resp.text
             friendly_hint = ""
             try:
@@ -278,83 +271,83 @@ class 火山引擎API:
                 if isinstance(error_data, dict):
                     err_obj = error_data.get("error", error_data)
                     error_code = err_obj.get("code", "") if isinstance(err_obj, dict) else ""
-                # 内容审核类错误
+                # Content moderation errors
                 if "SensitiveContent" in error_code or "PrivacyInformation" in error_code:
-                    friendly_hint = "\n⚠️ 输入图片触发了内容审核，可能包含真人面部或隐私信息。请更换参考图片后重试。"
-                # 404 模型不存在
+                    friendly_hint = "\n⚠️ Input image triggered content moderation. May contain faces or private info. Please change the reference image and retry."
+                # 404 Model not found
                 if resp.status_code == 404 and "NotFound" in str(error_data):
                     key = api_key or self.api_key
                     if key not in MODEL_CACHE:
-                        print("[火山引擎] 模型不存在，正在获取可用模型列表...")
+                        print("[VolcEngine] Model not found, fetching available models...")
                         MODEL_CACHE[key] = fetch_available_models(key)
                     if MODEL_CACHE[key]:
                         print("\n" + "=" * 60)
-                        print("[火山引擎] 可用模型列表：")
+                        print("[VolcEngine] Available models:")
                         for i, m in enumerate(MODEL_CACHE[key], 1):
                             print(f"  {i}. {m}")
                         print("=" * 60 + "\n")
-                # 429 限流
+                # 429 Rate limit
                 if resp.status_code == 429:
-                    friendly_hint = "\n⚠️ API 请求频率过高（限流），请稍后重试或降低并发数。"
-                # 402 余额不足
+                    friendly_hint = "\n⚠️ API rate limited. Please retry later or reduce concurrency."
+                # 402 Insufficient balance
                 if resp.status_code == 402:
-                    friendly_hint = "\n⚠️ 账户余额不足或套餐已过期，请充值后重试。"
-                # 401 认证失败
+                    friendly_hint = "\n⚠️ Insufficient account balance or expired plan. Please recharge."
+                # 401 Auth failed
                 if resp.status_code == 401:
-                    friendly_hint = "\n⚠️ API Key 无效或已过期，请检查密钥是否正确。"
+                    friendly_hint = "\n⚠️ API Key is invalid or expired. Please check your key."
             except Exception:
                 pass
-            raise RuntimeError(f"创建任务失败 [{resp.status_code}]: {error_text}{friendly_hint}")
+            raise RuntimeError(f"Task creation failed [{resp.status_code}]: {error_text}{friendly_hint}")
         data = resp.json()
         task_id = data.get("id") or data.get("task_id")
         if not task_id:
-            raise RuntimeError(f"未获取到 task_id，响应: {json.dumps(data, ensure_ascii=False)}")
+            raise RuntimeError(f"No task_id returned, response: {json.dumps(data, ensure_ascii=False)}")
         return task_id
 
     def poll_task(self, task_id: str, poll_interval: int = 10, max_wait: int = 600, model_name: str = "") -> dict:
-        """轮询任务状态，直到成功或超时；网络瞬态异常自动重试"""
+        """Poll task status until success or timeout; retry on transient network errors"""
         import requests.exceptions
         url = f"{self.BASE_URL}/tasks/{task_id}"
         start = time.time()
         net_retry_count = 0
-        max_net_retries = 5  # 网络异常最多重试 5 次
+        max_net_retries = 5
         poll_count = 0
-        prefix = model_name.strip() if model_name.strip() else "火山引擎"
-        print(f"[{prefix}] 开始轮询任务 {task_id}...", flush=True)
+        prefix = model_name.strip() if model_name.strip() else "VolcEngine"
+        print(f"[{prefix}] Polling task {task_id}...", flush=True)
         while time.time() - start < max_wait:
             try:
                 resp = requests.get(url, headers=self.headers, timeout=30)
-                net_retry_count = 0  # 成功后重置计数
+                net_retry_count = 0
             except (requests.exceptions.ConnectionError,
                     requests.exceptions.ChunkedEncodingError,
                     requests.exceptions.ReadTimeout) as e:
                 net_retry_count += 1
                 if net_retry_count > max_net_retries:
-                    raise RuntimeError(f"轮询网络异常（已重试 {max_net_retries} 次）: {e}")
+                    raise RuntimeError(f"Network error during polling (retried {max_net_retries} times): {e}")
                 wait = min(poll_interval * net_retry_count, 60)
                 elapsed = int(time.time() - start)
-                print(f"\r[{prefix}] ⏳ 网络异常（第{net_retry_count}次）| 已等待 {elapsed//60}:{elapsed%60:02d} | 继续重试...", end="", flush=True)
+                print(f"\r[{prefix}] ⏳ Network error (retry #{net_retry_count}) | Waiting {elapsed//60}:{elapsed%60:02d} | Retrying...", end="", flush=True)
                 time.sleep(wait)
                 continue
             if not resp.ok:
-                raise RuntimeError(f"查询任务失败 [{resp.status_code}]: {resp.text}")
+                raise RuntimeError(f"Task query failed [{resp.status_code}]: {resp.text}")
             data = resp.json()
             status = data.get("status", "")
             if status == "succeeded":
                 elapsed = int(time.time() - start)
-                print(f"\r[{prefix}] ✅ 完成 | 轮询 {poll_count} 次 | 耗时 {elapsed//60}:{elapsed%60:02d}    ")
+                print(f"\r[{prefix}] ✅ Done | Polls {poll_count} | Elapsed {elapsed//60}:{elapsed%60:02d}    ")
                 return data
             if status == "failed":
                 error = data.get("error", {})
-                raise RuntimeError(f"任务失败: {error.get('message', json.dumps(data, ensure_ascii=False))}")
+                raise RuntimeError(f"Task failed: {error.get('message', json.dumps(data, ensure_ascii=False))}")
             poll_count += 1
             elapsed = int(time.time() - start)
-            print(f"\r[{prefix}] ⏳ 运行中 | 轮询 #{poll_count} | 已等待 {elapsed//60}:{elapsed%60:02d}", end="", flush=True)
+            print(f"\r[{prefix}] ⏳ Running | Poll #{poll_count} | Waiting {elapsed//60}:{elapsed%60:02d}", end="", flush=True)
             time.sleep(poll_interval)
-        raise TimeoutError(f"任务超时（{max_wait}秒），task_id={task_id}")
+        raise TimeoutError(f"Task timeout ({max_wait}s), task_id={task_id}")
 
     def extract_video_url(self, result: dict) -> str:
-        """从任务结果中提取视频 URL"""
+        """Extract video URL from task result"""
         choices = result.get("choices", [])
         if choices:
             for choice in choices:
@@ -377,13 +370,13 @@ class 火山引擎API:
         if url:
             return url
 
-        # 新版 API: content 是 dict，直接取 video_url
+        # New API: content is dict
         content = result.get("content")
         if isinstance(content, dict):
             url = content.get("video_url") or content.get("url")
             if url:
                 return url
-        # 旧版兼容: content 是 list
+        # Legacy: content is list
         elif isinstance(content, list):
             for item in content:
                 if isinstance(item, dict):
@@ -391,38 +384,38 @@ class 火山引擎API:
                     if url:
                         return url
 
-        raise RuntimeError(f"未能从结果中提取视频 URL: {json.dumps(result, ensure_ascii=False)[:500]}")
+        raise RuntimeError(f"Unable to extract video URL: {json.dumps(result, ensure_ascii=False)[:500]}")
 
 
 # ─────────────────────────────────────────────
-# 构建 API 请求 payload
+# Build API Request Payload
 # ─────────────────────────────────────────────
 
-def build_payload(模型, 提示词="", 图片=None, 音频=None, 视频时长=5,
-                  分辨率="720p", 宽高比="adaptive", 生成音频=True,
-                  固定摄像头=False, 返回尾帧=False, 服务等级="default",
-                  随机种子=-1, 水印=True):
+def build_payload(model, prompt="", image=None, audio=None, video_duration=5,
+                  resolution="720p", aspect_ratio="adaptive", generate_audio=True,
+                  camera_fixed=False, return_last_frame=False, service_tier="default",
+                  seed=-1, watermark=True):
     """
-    构建 Seedance 2.0 多模态请求 payload
+    Build Seedance 2.0 multi-modal request payload
 
-    兼容新旧 API：
-    - Seedance 2.0: 使用 input 数组 + 顶层参数
-    - 旧版: 使用 content 数组 + 提示词内嵌参数
+    Compatible with old/new API:
+    - Seedance 2.0: content array + top-level params
+    - Legacy: content array + prompt-embedded params
     """
-    is_v2 = "2-0" in 模型
+    is_v2 = "2-0" in model
 
     if is_v2:
-        # ── Seedance 2.0: content 数组 + 顶层参数 ──
+        # ── Seedance 2.0: content array + top-level params ──
         content_list = []
 
-        # 文本提示词
-        if 提示词.strip():
-            content_list.append({"type": "text", "text": 提示词.strip()})
+        # Text prompt
+        if prompt.strip():
+            content_list.append({"type": "text", "text": prompt.strip()})
 
-        # 图片：根据数量自动判断 role
-        if 图片 is not None:
-            num_images = 图片.shape[0]
-            b64_list = tensors_to_base64_list(图片)
+        # Images: auto-detect role based on count
+        if image is not None:
+            num_images = image.shape[0]
+            b64_list = tensors_to_base64_list(image)
 
             if num_images == 1:
                 content_list.append({
@@ -449,9 +442,9 @@ def build_payload(模型, 提示词="", 图片=None, 音频=None, 视频时长=5
                         "role": "reference_image",
                     })
 
-        # 参考音频 (role=reference_audio，必须至少有1张图片)
-        if 音频 is not None:
-            audio_b64 = audio_to_base64(音频)
+        # Reference audio (role=reference_audio, must have at least 1 image)
+        if audio is not None:
+            audio_b64 = audio_to_base64(audio)
             content_list.append({
                 "type": "audio_url",
                 "audio_url": {"url": f"data:audio/wav;base64,{audio_b64}"},
@@ -459,37 +452,37 @@ def build_payload(模型, 提示词="", 图片=None, 音频=None, 视频时长=5
             })
 
         payload = {
-            "model": 模型.strip(),
+            "model": model.strip(),
             "content": content_list,
-            "duration": 视频时长,
-            "resolution": 分辨率,
-            "ratio": 宽高比,
-            "generate_audio": 生成音频,
-            "camera_fixed": 固定摄像头,
-            "return_last_frame": 返回尾帧,
-            "watermark": 水印,
+            "duration": video_duration,
+            "resolution": resolution,
+            "ratio": aspect_ratio,
+            "generate_audio": generate_audio,
+            "camera_fixed": camera_fixed,
+            "return_last_frame": return_last_frame,
+            "watermark": watermark,
         }
-        # service_tier 只在图生视频时支持
-        if 图片 is not None and 服务等级 != "default":
-            payload["service_tier"] = 服务等级
-        if 随机种子 != -1:
-            payload["seed"] = 随机种子
+        # service_tier only supported for image-to-video
+        if image is not None and service_tier != "default":
+            payload["service_tier"] = service_tier
+        if seed != -1:
+            payload["seed"] = seed
 
     else:
-        # ── 旧版 Seedance 1.x: content 数组 ──
-        param_str = f" --duration {视频时长}"
-        if 随机种子 != -1:
-            param_str += f" --seed {随机种子}"
-        param_str += " --watermark true" if 水印 else " --watermark false"
+        # ── Legacy Seedance 1.x: content array ──
+        param_str = f" --duration {video_duration}"
+        if seed != -1:
+            param_str += f" --seed {seed}"
+        param_str += " --watermark true" if watermark else " --watermark false"
 
-        text_content = 提示词.strip() if 提示词.strip() else ""
+        text_content = prompt.strip() if prompt.strip() else ""
         text_content += param_str
 
         content = [{"type": "text", "text": text_content}]
 
-        if 图片 is not None:
-            num_images = 图片.shape[0]
-            b64_list = tensors_to_base64_list(图片)
+        if image is not None:
+            num_images = image.shape[0]
+            b64_list = tensors_to_base64_list(image)
 
             if num_images == 1:
                 content.append({
@@ -516,20 +509,20 @@ def build_payload(模型, 提示词="", 图片=None, 音频=None, 视频时长=5
                         "role": "reference_image",
                     })
 
-        payload = {"model": 模型.strip(), "content": content}
+        payload = {"model": model.strip(), "content": content}
 
     return payload
 
 
 # ─────────────────────────────────────────────
-# 并发生成辅助函数
+# Concurrent Generation Helper
 # ─────────────────────────────────────────────
 
-def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
+def _concurrent_run(num_tasks, concurrency, tasks, run_fn, log_prefix):
     """
-    并发执行任务
-    
-    tasks: [(prompt, seed), ...] 或 [(image, prompt, seed), ...]
+    Execute tasks concurrently
+
+    tasks: [(prompt, seed), ...] or [(image, prompt, seed), ...]
     run_fn: function(idx, task) -> (frames, audio, info)
     """
     import concurrent.futures
@@ -539,7 +532,7 @@ def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
     all_infos = []
     failed = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(并发数, 任务数)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(concurrency, num_tasks)) as executor:
         future_map = {}
         for idx, task in enumerate(tasks):
             future = executor.submit(run_fn, idx, task)
@@ -553,16 +546,15 @@ def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
                 all_audios.append((idx, audio_dict))
                 all_infos.append((idx, video_info))
             except Exception as e:
-                print(f"[火山引擎 {log_prefix}] #{idx+1} 失败: {e}")
+                print(f"[VolcEngine {log_prefix}] #{idx+1} failed: {e}")
                 failed.append((idx, str(e)))
 
     if not all_frames:
-        # 收集所有失败的详细信息
         failed_msgs = [f"#Task{idx+1}: {err}" for idx, err in failed]
         error_detail = "\n".join(failed_msgs)
-        raise RuntimeError(f"所有 {任务数} 次任务均失败\n详细错误:\n{error_detail}")
+        raise RuntimeError(f"All {num_tasks} tasks failed\nDetails:\n{error_detail}")
 
-    # 按原始顺序排列
+    # Sort by original order
     all_frames.sort(key=lambda x: x[0])
     all_audios.sort(key=lambda x: x[0])
     all_infos.sort(key=lambda x: x[0])
@@ -571,11 +563,9 @@ def _concurrent_run(任务数, 并发数, tasks, run_fn, log_prefix):
 
 
 def _combine_results(all_frames, all_audios):
-    """合并多组结果为一个批次"""
-    # 拼接所有帧为一个批次
+    """Merge multiple results into one batch"""
     combined_frames = torch.cat([f for _, f in all_frames], dim=0)
 
-    # 拼接所有音频
     combined_waveforms = []
     max_sr = 44100
     for _, ad in all_audios:
@@ -600,13 +590,13 @@ def _combine_results(all_frames, all_audios):
 
 
 # ─────────────────────────────────────────────
-# 文生视频节点
+# Text-to-Video Node
 # ─────────────────────────────────────────────
 
-class 火山引擎文生视频:
-    """火山引擎 文生视频
-    
-    并发数 > 1 时：抽卡模式（同一提示词，不同种子）
+class VolcEngineTextToVideo:
+    """VolcEngine Text-to-Video
+
+    When concurrency > 1: roll mode (same prompt, different seeds)
     """
 
     @classmethod
@@ -616,107 +606,107 @@ class 火山引擎文生视频:
                 "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "火山引擎方舟 API Key",
+                    "placeholder": "VolcEngine Ark API Key",
                 }),
-                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
-                "提示词": ("STRING", {
+                "model": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "prompt": ("STRING", {
                     "default": "",
                     "multiline": True,
-                    "placeholder": "描述你想生成的视频内容",
+                    "placeholder": "Describe the video content you want to generate",
                 }),
-                "并发数": ("INT", {
+                "concurrency": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5,
                     "step": 1,
                 }),
-                "视频时长秒": ("INT", {
+                "video_duration": ("INT", {
                     "default": 5,
                     "min": 4,
                     "max": 15,
                     "step": 1,
                     "display": "number",
                 }),
-                "分辨率": (["480p", "720p"], {"default": "720p"}),
-                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
-                "生成音频": ("BOOLEAN", {"default": True}),
-                "固定摄像头": ("BOOLEAN", {"default": False}),
-                "返回尾帧": ("BOOLEAN", {"default": False}),
-                "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": False}),
+                "resolution": (["480p", "720p"], {"default": "720p"}),
+                "aspect_ratio": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "16:9"}),
+                "generate_audio": ("BOOLEAN", {"default": True}),
+                "camera_fixed": ("BOOLEAN", {"default": False}),
+                "return_last_frame": ("BOOLEAN", {"default": False}),
+                "service_tier": (["default", "flex"], {"default": "default"}),
+                "watermark": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
-                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
-                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+                "seed": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "poll_interval": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "max_wait": ("INT", {"default": 600, "min": 60, "max": 1800}),
             }
         }
 
     RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
-    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    RETURN_NAMES = ("Video Frames", "Audio", "Video Info")
     OUTPUT_NODE = True
-    FUNCTION = "生成"
-    CATEGORY = "火山引擎"
+    FUNCTION = "execute"
+    CATEGORY = "VolcEngine"
 
-    def 生成(self, api_key, 模型, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
-             随机种子=-1, 轮询间隔=10, 最大等待=600):
+    def execute(self, api_key, model, prompt, concurrency, video_duration, resolution, aspect_ratio, generate_audio, camera_fixed, return_last_frame, service_tier, watermark,
+                seed=-1, poll_interval=10, max_wait=600):
 
         if not api_key.strip():
-            raise ValueError("请填入火山引擎方舟 API Key")
-        if not 模型.strip():
-            raise ValueError("请选择模型")
-        if not 提示词.strip():
-            raise ValueError("请填入提示词")
+            raise ValueError("Please fill in VolcEngine Ark API Key")
+        if not model.strip():
+            raise ValueError("Please select a model")
+        if not prompt.strip():
+            raise ValueError("Please fill in prompt")
 
-        api = 火山引擎API(api_key.strip())
+        api = VolcEngineAPI(api_key.strip())
         import random
 
-        # 生成种子列表
-        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
-        seeds = [base_seed + i for i in range(并发数)]
+        # Generate seed list
+        base_seed = seed if seed != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(concurrency)]
 
-        log_prefix = "文生视频"
+        log_prefix = "Text-to-Video"
 
-        desc_parts = [f"模型={模型}", f"任务数={并发数}"]
-        if 服务等级 == "flex":
-            desc_parts.append("离线推理")
-        print(f"[火山引擎 {log_prefix}] {' | '.join(desc_parts)}")
+        desc_parts = [f"model={model}", f"tasks={concurrency}"]
+        if service_tier == "flex":
+            desc_parts.append("offline")
+        print(f"[VolcEngine {log_prefix}] {' | '.join(desc_parts)}")
 
-        def _run_single(idx, seed):
+        def _run_single(idx, task_seed):
             payload = build_payload(
-                模型=模型, 提示词=提示词, 图片=None, 音频=None,
-                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
-                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
-                服务等级="default", 随机种子=seed, 水印=水印
+                model=model, prompt=prompt, image=None, audio=None,
+                video_duration=video_duration, resolution=resolution, aspect_ratio=aspect_ratio,
+                generate_audio=generate_audio, camera_fixed=camera_fixed, return_last_frame=return_last_frame,
+                service_tier="default", seed=task_seed, watermark=watermark
             )
             task_id = api.create_task(payload, api_key=api_key.strip())
-            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
+            print(f"[VolcEngine {log_prefix}] #{idx+1}/{concurrency} seed={task_seed} | task_id={task_id}")
 
-            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待, model_name=模型)
+            result = api.poll_task(task_id, poll_interval=poll_interval, max_wait=max_wait, model_name=model)
             video_url = api.extract_video_url(result)
 
-            print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
-            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=生成音频)
+            print(f"[VolcEngine {log_prefix}] #{idx+1} fetching video and parsing frames...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=generate_audio)
 
-            video_info["seed"] = seed
+            video_info["seed"] = task_seed
             video_info["task_index"] = idx + 1
-            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+            print(f"[VolcEngine {log_prefix}] #{idx+1} done: {video_info['total_frames']} frames, {video_info['duration']:.2f}s")
 
             return frames_tensor, audio_dict, video_info
 
-        # 任务列表：(seed,)
+        # Task list: (seed,)
         tasks = [(s,) for s in seeds]
 
         all_frames, all_audios, all_infos, failed = _concurrent_run(
-            并发数, 并发数, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
+            concurrency, concurrency, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
         )
 
         combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
 
-        # 构建信息
+        # Build info
         result_info = {
-            "type": "文生视频",
-            "total_tasks": 并发数,
+            "type": "text-to-video",
+            "total_tasks": concurrency,
             "success": len(all_frames),
             "failed": len(failed),
             "base_seed": base_seed,
@@ -727,19 +717,19 @@ class 火山引擎文生视频:
             result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
 
         info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 {log_prefix}] 完成: {len(all_frames)}/{并发数} 成功, {len(failed)} 失败")
+        print(f"[VolcEngine {log_prefix}] Done: {len(all_frames)}/{concurrency} success, {len(failed)} failed")
 
         return (combined_frames, combined_audio_dict, info_str)
 
 
 # ─────────────────────────────────────────────
-# 图生视频节点
+# Image-to-Video Node
 # ─────────────────────────────────────────────
 
-class 火山引擎图生视频:
-    """火山引擎 图生视频（支持多图+参考音频）
-    
-    并发数 > 1 时：抽卡模式（同一配置，不同种子）
+class VolcEngineImageToVideo:
+    """VolcEngine Image-to-Video (supports multi-image + reference audio)
+
+    When concurrency > 1: roll mode (same config, different seeds)
     """
 
     @classmethod
@@ -749,123 +739,123 @@ class 火山引擎图生视频:
                 "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "火山引擎方舟 API Key",
+                    "placeholder": "VolcEngine Ark API Key",
                 }),
-                "模型": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
-                "图片": ("IMAGE",),
-                "提示词": ("STRING", {
+                "model": (FALLBACK_MODELS, {"default": FALLBACK_MODELS[0]}),
+                "image": ("IMAGE",),
+                "prompt": ("STRING", {
                     "default": "",
                     "multiline": True,
-                    "placeholder": "描述运动方式（可留空）",
+                    "placeholder": "Describe the motion (can be left empty)",
                 }),
-                "并发数": ("INT", {
+                "concurrency": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5,
                     "step": 1,
                 }),
-                "视频时长秒": ("INT", {
+                "video_duration": ("INT", {
                     "default": 5,
                     "min": 4,
                     "max": 15,
                     "step": 1,
                     "display": "number",
                 }),
-                "分辨率": (["480p", "720p"], {"default": "720p"}),
-                "宽高比": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
-                "生成音频": ("BOOLEAN", {"default": True}),
-                "固定摄像头": ("BOOLEAN", {"default": False}),
-                "返回尾帧": ("BOOLEAN", {"default": False}),
-                "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": False}),
+                "resolution": (["480p", "720p"], {"default": "720p"}),
+                "aspect_ratio": (["16:9", "4:3", "1:1", "3:4", "9:16", "21:9", "adaptive"], {"default": "adaptive"}),
+                "generate_audio": ("BOOLEAN", {"default": True}),
+                "camera_fixed": ("BOOLEAN", {"default": False}),
+                "return_last_frame": ("BOOLEAN", {"default": False}),
+                "service_tier": (["default", "flex"], {"default": "default"}),
+                "watermark": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "参考音频": ("AUDIO",),
-                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
-                "轮询间隔": ("INT", {"default": 10, "min": 3, "max": 30}),
-                "最大等待": ("INT", {"default": 600, "min": 60, "max": 1800}),
+                "reference_audio": ("AUDIO",),
+                "seed": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "poll_interval": ("INT", {"default": 10, "min": 3, "max": 30}),
+                "max_wait": ("INT", {"default": 600, "min": 60, "max": 1800}),
             }
         }
 
     RETURN_TYPES = ("IMAGE", "AUDIO", "STRING")
-    RETURN_NAMES = ("视频帧", "音频", "视频信息")
+    RETURN_NAMES = ("Video Frames", "Audio", "Video Info")
     OUTPUT_NODE = True
-    FUNCTION = "生成"
-    CATEGORY = "火山引擎"
+    FUNCTION = "execute"
+    CATEGORY = "VolcEngine"
 
-    def 生成(self, api_key, 模型, 图片, 提示词, 并发数, 视频时长秒, 分辨率, 宽高比, 生成音频, 固定摄像头, 返回尾帧, 服务等级, 水印,
-             参考音频=None, 随机种子=-1, 轮询间隔=10, 最大等待=600):
+    def execute(self, api_key, model, image, prompt, concurrency, video_duration, resolution, aspect_ratio, generate_audio, camera_fixed, return_last_frame, service_tier, watermark,
+                reference_audio=None, seed=-1, poll_interval=10, max_wait=600):
 
         if not api_key.strip():
-            raise ValueError("请填入火山引擎方舟 API Key")
-        if not 模型.strip():
-            raise ValueError("请选择模型")
+            raise ValueError("Please fill in VolcEngine Ark API Key")
+        if not model.strip():
+            raise ValueError("Please select a model")
 
-        num_images = 图片.shape[0]
+        num_images = image.shape[0]
         if num_images > 9:
-            raise ValueError(f"最多支持 9 张图片，当前 {num_images} 张")
+            raise ValueError(f"Maximum 9 images supported, currently {num_images}")
 
-        api = 火山引擎API(api_key.strip())
+        api = VolcEngineAPI(api_key.strip())
         import random
 
-        # 描述模式
+        # Mode description
         if num_images == 1:
-            mode_desc = "首帧模式"
+            mode_desc = "first-frame"
         elif num_images == 2:
-            mode_desc = "首尾帧模式"
+            mode_desc = "first-last-frame"
         else:
-            mode_desc = f"多参考图模式 ({num_images}张)"
+            mode_desc = f"multi-reference ({num_images})"
 
-        if 参考音频 is not None:
-            mode_desc += "+参考音频"
+        if reference_audio is not None:
+            mode_desc += "+reference-audio"
 
-        # 生成种子列表
-        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
-        seeds = [base_seed + i for i in range(并发数)]
-        
-        log_prefix = "图生视频"
-        
-        desc_parts = [f"模型={模型}", f"模式={mode_desc}", f"任务数={并发数}", f"时长={视频时长秒}s"]
-        if 服务等级 == "flex":
-            desc_parts.append("离线推理")
-        print(f"[火山引擎 {log_prefix}] {' | '.join(desc_parts)}")
+        # Generate seed list
+        base_seed = seed if seed != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(concurrency)]
 
-        def _run_single(idx, seed):
+        log_prefix = "Image-to-Video"
+
+        desc_parts = [f"model={model}", f"mode={mode_desc}", f"tasks={concurrency}", f"duration={video_duration}s"]
+        if service_tier == "flex":
+            desc_parts.append("offline")
+        print(f"[VolcEngine {log_prefix}] {' | '.join(desc_parts)}")
+
+        def _run_single(idx, task_seed):
             payload = build_payload(
-                模型=模型, 提示词=提示词, 图片=图片, 音频=参考音频,
-                视频时长=视频时长秒, 分辨率=分辨率, 宽高比=宽高比,
-                生成音频=生成音频, 固定摄像头=固定摄像头, 返回尾帧=返回尾帧,
-                服务等级=服务等级, 随机种子=seed, 水印=水印
+                model=model, prompt=prompt, image=image, audio=reference_audio,
+                video_duration=video_duration, resolution=resolution, aspect_ratio=aspect_ratio,
+                generate_audio=generate_audio, camera_fixed=camera_fixed, return_last_frame=return_last_frame,
+                service_tier=service_tier, seed=task_seed, watermark=watermark
             )
             task_id = api.create_task(payload, api_key=api_key.strip())
-            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | task_id={task_id}")
+            print(f"[VolcEngine {log_prefix}] #{idx+1}/{concurrency} seed={task_seed} | task_id={task_id}")
 
-            result = api.poll_task(task_id, poll_interval=轮询间隔, max_wait=最大等待, model_name=模型)
+            result = api.poll_task(task_id, poll_interval=poll_interval, max_wait=max_wait, model_name=model)
             video_url = api.extract_video_url(result)
 
-            print(f"[火山引擎 {log_prefix}] #{idx+1} 获取视频并解析帧...")
-            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=生成音频)
+            print(f"[VolcEngine {log_prefix}] #{idx+1} fetching video and parsing frames...")
+            frames_tensor, audio_dict, video_info = load_video_from_url(video_url, expected_audio=generate_audio)
 
-            video_info["seed"] = seed
+            video_info["seed"] = task_seed
             video_info["task_index"] = idx + 1
-            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {video_info['total_frames']}帧, {video_info['duration']:.2f}秒")
+            print(f"[VolcEngine {log_prefix}] #{idx+1} done: {video_info['total_frames']} frames, {video_info['duration']:.2f}s")
 
             return frames_tensor, audio_dict, video_info
 
-        # 任务列表：(seed,)
+        # Task list: (seed,)
         tasks = [(s,) for s in seeds]
 
         all_frames, all_audios, all_infos, failed = _concurrent_run(
-            并发数, 并发数, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
+            concurrency, concurrency, tasks, lambda idx, task: _run_single(idx, task[0]), log_prefix
         )
 
         combined_frames, combined_audio_dict = _combine_results(all_frames, all_audios)
 
-        # 构建信息
+        # Build info
         result_info = {
-            "type": "图生视频",
+            "type": "image-to-video",
             "mode": mode_desc,
-            "total_tasks": 并发数,
+            "total_tasks": concurrency,
             "success": len(all_frames),
             "failed": len(failed),
             "base_seed": base_seed,
@@ -876,26 +866,26 @@ class 火山引擎图生视频:
             result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
 
         info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 {log_prefix}] 完成: {len(all_frames)}/{并发数} 成功, {len(failed)} 失败")
+        print(f"[VolcEngine {log_prefix}] Done: {len(all_frames)}/{concurrency} success, {len(failed)} failed")
 
         return (combined_frames, combined_audio_dict, info_str)
 
 
 # ─────────────────────────────────────────────
-# 图像生成节点
+# Image Generation Node
 # ─────────────────────────────────────────────
 
-class 火山引擎图像生成:
-    """火山引擎 图像生成
-    
-    支持：
-    - 文生图：提示词生成图片
-    - 图生图：参考图片 + 提示词生成新图片
-    - 并发生成：同一配置不同种子
-    
-    API 端点: /api/v3/images/generations（同步返回）
+class VolcEngineImageGeneration:
+    """VolcEngine Image Generation
+
+    Supports:
+    - Text-to-image: generate from prompt
+    - Image-to-image: reference image + prompt
+    - Concurrent generation: same config, different seeds
+
+    API Endpoint: /api/v3/images/generations (synchronous)
     """
-    
+
     IMAGE_API_URL = "https://ark.cn-beijing.volces.com/api/v3/images/generations"
 
     @classmethod
@@ -905,45 +895,45 @@ class 火山引擎图像生成:
                 "api_key": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "placeholder": "火山引擎方舟 API Key",
+                    "placeholder": "VolcEngine Ark API Key",
                 }),
-                "模型": (FALLBACK_IMAGE_MODELS, {"default": FALLBACK_IMAGE_MODELS[0]}),
-                "提示词": ("STRING", {
+                "model": (FALLBACK_IMAGE_MODELS, {"default": FALLBACK_IMAGE_MODELS[0]}),
+                "prompt": ("STRING", {
                     "default": "",
                     "multiline": True,
-                    "placeholder": "描述你想生成的图片内容",
+                    "placeholder": "Describe the image content you want to generate",
                 }),
-                "并发数": ("INT", {
+                "concurrency": ("INT", {
                     "default": 1,
                     "min": 1,
                     "max": 5,
                     "step": 1,
                 }),
-                "图片尺寸": (["1024x1024", "2048x2048", "3072x3072", "4096x4096", "1280x720", "1920x1080"], {"default": "1024x1024"}),
-                "服务等级": (["default", "flex"], {"default": "default"}),
-                "水印": ("BOOLEAN", {"default": False}),
+                "image_size": (["1024x1024", "2048x2048", "3072x3072", "4096x4096", "1280x720", "1920x1080"], {"default": "1024x1024"}),
+                "service_tier": (["default", "flex"], {"default": "default"}),
+                "watermark": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "参考图片": ("IMAGE",),
-                "随机种子": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
+                "reference_image": ("IMAGE",),
+                "seed": ("INT", {"default": -1, "min": -1, "max": 2147483647}),
             }
         }
 
     RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("图片", "生成信息")
+    RETURN_NAMES = ("Image", "Generation Info")
     OUTPUT_NODE = True
-    FUNCTION = "生成"
-    CATEGORY = "火山引擎"
+    FUNCTION = "execute"
+    CATEGORY = "VolcEngine"
 
-    def 生成(self, api_key, 模型, 提示词, 并发数, 图片尺寸, 服务等级, 水印,
-             参考图片=None, 随机种子=-1):
+    def execute(self, api_key, model, prompt, concurrency, image_size, service_tier, watermark,
+                reference_image=None, seed=-1):
 
         if not api_key.strip():
-            raise ValueError("请填入火山引擎方舟 API Key")
-        if not 模型.strip():
-            raise ValueError("请选择模型")
-        if not 提示词.strip() and 参考图片 is None:
-            raise ValueError("请填入提示词或提供参考图片")
+            raise ValueError("Please fill in VolcEngine Ark API Key")
+        if not model.strip():
+            raise ValueError("Please select a model")
+        if not prompt.strip() and reference_image is None:
+            raise ValueError("Please fill in prompt or provide reference image")
 
         import random
 
@@ -952,47 +942,48 @@ class 火山引擎图像生成:
             "Content-Type": "application/json",
         }
 
-        # 生成种子列表
-        base_seed = 随机种子 if 随机种子 != -1 else random.randint(0, 2147483647)
-        seeds = [base_seed + i for i in range(并发数)]
+        # Generate seed list
+        base_seed = seed if seed != -1 else random.randint(0, 2147483647)
+        seeds = [base_seed + i for i in range(concurrency)]
 
-        log_prefix = "图像生成"
+        log_prefix = "Image Generation"
 
-        mode_desc = "图生图" if 参考图片 is not None else "文生图"
-        print(f"[火山引擎 {log_prefix}] 模型={模型} | 模式={mode_desc} | 任务数={并发数} | 尺寸={图片尺寸}")
+        mode_desc = "image-to-image" if reference_image is not None else "text-to-image"
+        print(f"[VolcEngine {log_prefix}] model={model} | mode={mode_desc} | tasks={concurrency} | size={image_size}")
 
-        def _run_single(idx, seed):
-            # 构建图像生成 payload
+        # Capture outer self for closure
+        outer_self = self
+
+        def _run_single(idx, task_seed):
             payload = {
-                "model": 模型.strip(),
-                "prompt": 提示词.strip(),
-                "size": 图片尺寸,
-                "watermark": 水印,
+                "model": model.strip(),
+                "prompt": prompt.strip(),
+                "size": image_size,
+                "watermark": watermark,
                 "response_format": "url",
             }
-            if 服务等级 != "default":
-                payload["service_tier"] = 服务等级
-            
-            if seed != -1:
-                payload["seed"] = seed
+            if service_tier != "default":
+                payload["service_tier"] = service_tier
 
-            # 参考图片：转换为 URL 或 base64
-            if 参考图片 is not None:
-                b64_list = tensors_to_base64_list(参考图片)
+            if task_seed != -1:
+                payload["seed"] = task_seed
+
+            # Reference image: convert to URL or base64
+            if reference_image is not None:
+                b64_list = tensors_to_base64_list(reference_image)
                 if len(b64_list) == 1:
                     payload["image"] = f"data:image/jpeg;base64,{b64_list[0]}"
                 else:
-                    # 多图使用 image, image2, image3...
-                    for i, b64 in enumerate(b64_list[:10]):  # 最多10张
+                    for i, b64 in enumerate(b64_list[:10]):
                         if i == 0:
                             payload["image"] = f"data:image/jpeg;base64,{b64}"
                         else:
                             payload[f"image{i+1}"] = f"data:image/jpeg;base64,{b64}"
 
-            print(f"[火山引擎 {log_prefix}] #{idx+1}/{并发数} seed={seed} | 请求中...")
+            print(f"[VolcEngine {log_prefix}] #{idx+1}/{concurrency} seed={task_seed} | requesting...")
 
-            # 直接调用图像生成 API（同步）
-            resp = requests.post(self.IMAGE_API_URL, json=payload, headers=headers, timeout=120)
+            # Call image generation API (synchronous)
+            resp = requests.post(outer_self.IMAGE_API_URL, json=payload, headers=headers, timeout=120)
             if not resp.ok:
                 error_hint = ""
                 try:
@@ -1002,27 +993,27 @@ class 火山引擎图像生成:
                         err_obj = error_data.get("error", error_data)
                         error_code = err_obj.get("code", "") if isinstance(err_obj, dict) else ""
                     if resp.status_code == 429:
-                        error_hint = "\n⚠️ API 请求频率过高（限流），请稍后重试或降低并发数。"
+                        error_hint = "\n⚠️ API rate limited. Please retry later or reduce concurrency."
                     if resp.status_code == 402:
-                        error_hint = "\n⚠️ 账户余额不足或套餐已过期，请充值后重试。"
+                        error_hint = "\n⚠️ Insufficient account balance or expired plan. Please recharge."
                     if resp.status_code == 401:
-                        error_hint = "\n⚠️ API Key 无效或已过期，请检查密钥是否正确。"
+                        error_hint = "\n⚠️ API Key is invalid or expired. Please check your key."
                 except Exception:
                     pass
-                raise RuntimeError(f"图像生成失败 [{resp.status_code}]: {resp.text}{error_hint}")
+                raise RuntimeError(f"Image generation failed [{resp.status_code}]: {resp.text}{error_hint}")
 
             result = resp.json()
-            
-            # 提取图片 URL
+
+            # Extract image URL
             data = result.get("data", [])
             if not data:
-                raise RuntimeError(f"未返回图片数据: {json.dumps(result, ensure_ascii=False)}")
-            
+                raise RuntimeError(f"No image data returned: {json.dumps(result, ensure_ascii=False)}")
+
             image_url = data[0].get("url") or data[0].get("b64_json")
             if not image_url:
-                raise RuntimeError(f"未找到图片URL: {json.dumps(result, ensure_ascii=False)}")
+                raise RuntimeError(f"No image URL found: {json.dumps(result, ensure_ascii=False)}")
 
-            # 下载图片
+            # Download image
             if image_url.startswith("http"):
                 img_resp = requests.get(image_url, timeout=60)
                 img_resp.raise_for_status()
@@ -1032,30 +1023,30 @@ class 火山引擎图像生成:
                 img_data = base64.b64decode(image_url)
                 img = Image.open(io.BytesIO(img_data)).convert("RGB")
 
-            # 转为 tensor
+            # Convert to tensor
             img_np = np.array(img).astype(np.float32) / 255.0
             img_tensor = torch.from_numpy(img_np).unsqueeze(0)  # [1, H, W, C]
 
             info = {
-                "seed": seed,
+                "seed": task_seed,
                 "task_index": idx + 1,
                 "width": img.width,
                 "height": img.height,
             }
-            print(f"[火山引擎 {log_prefix}] #{idx+1} 完成: {img.width}x{img.height}")
+            print(f"[VolcEngine {log_prefix}] #{idx+1} done: {img.width}x{img.height}")
 
             return img_tensor, info
 
-        # 并发执行
+        # Concurrent execution
         import concurrent.futures
         all_images = []
         all_infos = []
         failed = []
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=并发数) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
             future_map = {}
-            for idx, seed in enumerate(seeds):
-                future = executor.submit(_run_single, idx, seed)
+            for idx, task_seed in enumerate(seeds):
+                future = executor.submit(_run_single, idx, task_seed)
                 future_map[future] = idx
 
             for future in concurrent.futures.as_completed(future_map):
@@ -1065,24 +1056,24 @@ class 火山引擎图像生成:
                     all_images.append((idx, img_tensor))
                     all_infos.append((idx, info))
                 except Exception as e:
-                    print(f"[火山引擎 {log_prefix}] #{idx+1} 失败: {e}")
+                    print(f"[VolcEngine {log_prefix}] #{idx+1} failed: {e}")
                     failed.append((idx, str(e)))
 
         if not all_images:
-            raise RuntimeError(f"所有 {并发数} 次任务均失败")
+            raise RuntimeError(f"All {concurrency} tasks failed")
 
-        # 排序并合并
+        # Sort and merge
         all_images.sort(key=lambda x: x[0])
         all_infos.sort(key=lambda x: x[0])
         combined_images = torch.cat([img for _, img in all_images], dim=0)
 
-        # 构建信息
+        # Build info
         result_info = {
-            "type": "图像生成",
+            "type": "image-generation",
             "mode": mode_desc,
-            "model": 模型,
-            "size": 图片尺寸,
-            "total_tasks": 并发数,
+            "model": model,
+            "size": image_size,
+            "total_tasks": concurrency,
             "success": len(all_images),
             "failed": len(failed),
             "base_seed": base_seed,
@@ -1093,23 +1084,23 @@ class 火山引擎图像生成:
             result_info["failed_details"] = [{"task_index": idx + 1, "error": err} for idx, err in failed]
 
         info_str = json.dumps(result_info, ensure_ascii=False, indent=2)
-        print(f"[火山引擎 {log_prefix}] 完成: {len(all_images)}/{并发数} 成功, {len(failed)} 失败")
+        print(f"[VolcEngine {log_prefix}] Done: {len(all_images)}/{concurrency} success, {len(failed)} failed")
 
         return (combined_images, info_str)
 
 
 # ─────────────────────────────────────────────
-# 注册映射
+# Registration Mappings
 # ─────────────────────────────────────────────
 
 NODE_CLASS_MAPPINGS = {
-    "火山引擎文生视频": 火山引擎文生视频,
-    "火山引擎图生视频": 火山引擎图生视频,
-    "火山引擎图像生成": 火山引擎图像生成,
+    "VolcEngineTextToVideo": VolcEngineTextToVideo,
+    "VolcEngineImageToVideo": VolcEngineImageToVideo,
+    "VolcEngineImageGeneration": VolcEngineImageGeneration,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "火山引擎文生视频": "🎬 火山引擎 文生视频",
-    "火山引擎图生视频": "🎬 火山引擎 图生视频",
-    "火山引擎图像生成": "🖼️ 火山引擎 图像生成",
+    "VolcEngineTextToVideo": "🎬 VolcEngine Text to Video",
+    "VolcEngineImageToVideo": "🎬 VolcEngine Image to Video",
+    "VolcEngineImageGeneration": "🖼️ VolcEngine Image Generation",
 }
